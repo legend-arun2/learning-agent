@@ -1,0 +1,1397 @@
+<title>Genesis Five</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: observatory console. Top control bar, world canvas (left) beside the mind inspector (right), event timeline below. */
+:root{
+  --bg:#eef0ec; --panel:#ffffff; --panel-2:#f6f7f4; --ink:#1b211e; --muted:#5d6762; --line:#d8ddd6;
+  --accent:#d4581c; --accent-ink:#ffffff; --accent-soft:#fbe4d6;
+  --good:#2f8f5b; --bad:#c2362f; --warn:#b7791f; --claude:#7a55c9;
+  --font-display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body:"IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#101317; --panel:#181d23; --panel-2:#1f252c; --ink:#e7eae6; --muted:#9aa49f; --line:#2c343c;
+  --accent:#ff8a42; --accent-ink:#1a0d05; --accent-soft:#3a2216;
+  --good:#4fc184; --bad:#ff6b61; --warn:#e7b04b; --claude:#ae8cff; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#101317; --panel:#181d23; --panel-2:#1f252c; --ink:#e7eae6; --muted:#9aa49f; --line:#2c343c;
+  --accent:#ff8a42; --accent-ink:#1a0d05; --accent-soft:#3a2216;
+  --good:#4fc184; --bad:#ff6b61; --warn:#e7b04b; --claude:#ae8cff; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:14px;line-height:1.45;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:12px 24px}
+*{box-sizing:border-box}
+button,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
+
+/* top bar */
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:0 auto 12px;max-width:1500px}
+.brand{display:flex;align-items:baseline;gap:10px;min-width:0}
+.brand h1{font-size:24px;font-weight:800;letter-spacing:-.02em}
+.brand .tag{color:var(--muted);font-size:12px}
+.era{display:flex;flex-direction:column;gap:4px;min-width:200px;flex:1 1 240px}
+.era-top{display:flex;justify-content:space-between;gap:8px;font-size:12px}
+.era-name{font-family:var(--font-display);font-weight:700;font-size:15px}
+.era-track{display:grid;grid-template-columns:repeat(9,1fr);gap:3px}
+.era-track span{height:6px;border-radius:3px;background:var(--line)}
+.era-track span.on{background:var(--accent)}
+.era-track span.cur{background:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--panel)}
+.seg button{border:0;background:none;padding:6px 10px;font-size:13px}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;font-size:13px}
+.btn:hover{border-color:var(--muted)}
+.claude-box{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:4px 8px}
+.switch{position:relative;width:34px;height:20px;border-radius:10px;background:var(--line);border:0;padding:0;flex:none}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--panel);transition:left .15s}
+.switch[aria-checked="true"]{background:var(--claude)}
+.switch[aria-checked="true"]::after{left:17px}
+.switch:disabled{opacity:.45;cursor:not-allowed}
+.claude-box label{font-size:13px}
+.claude-box select{border:1px solid var(--line);border-radius:6px;background:var(--panel-2);padding:2px 4px;font-size:12px}
+.claude-box select:disabled{opacity:.5}
+.small{font-size:12px;color:var(--muted)}
+
+/* wipe */
+.wipe-wrap{display:flex;align-items:center;gap:6px}
+.wipe{position:relative;overflow:hidden;border:0;border-radius:8px;padding:8px 14px;background:var(--bad);color:#fff;font-weight:700;letter-spacing:.02em;font-size:13px;user-select:none;-webkit-user-select:none;touch-action:none}
+.wipe .fill{position:absolute;inset:0;background:rgba(0,0,0,.35);transform-origin:left;transform:scaleX(0)}
+.wipe span{position:relative}
+.info{width:24px;height:24px;border-radius:50%;border:1px solid var(--line);background:var(--panel);font-size:12px;padding:0;color:var(--muted)}
+.wipe-note{max-width:1500px;margin:0 auto 10px;border:1px solid var(--line);background:var(--panel);border-radius:var(--r);padding:10px 14px;font-size:13px}
+.wipe-note ul{margin:6px 0 0;padding-left:18px}
+
+/* main layout */
+.main{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:12px;max-width:1500px;margin:0 auto}
+.stage{display:flex;flex-direction:column;gap:12px;min-width:0}
+.world{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+#world{display:block;width:100%;cursor:pointer}
+.world-hud{position:absolute;left:10px;top:10px;display:flex;gap:6px;flex-wrap:wrap}
+.chip{border:1px solid var(--line);background:color-mix(in srgb, var(--panel) 88%, transparent);border-radius:999px;padding:3px 10px;font-size:12px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.world-legend{position:absolute;right:10px;bottom:10px;font-size:11px;color:var(--muted);background:color-mix(in srgb, var(--panel) 85%, transparent);border-radius:6px;padding:3px 8px}
+.roster{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px}
+.ag-card{display:flex;flex-direction:column;gap:4px;text-align:left;border:1px solid var(--line);background:var(--panel);border-radius:var(--r);padding:8px 10px;min-width:0}
+.ag-card[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.ag-card .nm{display:flex;align-items:center;gap:6px;font-family:var(--font-display);font-weight:700;font-size:15px}
+.dot{width:10px;height:10px;border-radius:50%;flex:none;display:inline-block}
+.ag-card .doing{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag-card .kn{font-size:11px;color:var(--muted)}
+
+/* panel */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-width:0;max-height:calc(100vh - 110px);position:sticky;top:12px}
+.tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs button{border:0;background:none;padding:10px 14px;font-size:13px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+.tabbody{overflow:auto;padding:14px;display:flex;flex-direction:column;gap:16px;min-height:0}
+.sec h3{font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-family:var(--font-body);font-weight:600;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.who{display:flex;gap:12px;align-items:center}
+.avatar{width:46px;height:46px;border-radius:50%;display:grid;place-items:center;font-size:22px;flex:none}
+.who h2{font-size:22px}
+.traits{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.pill{font-size:11px;border-radius:999px;padding:2px 8px;background:var(--panel-2);border:1px solid var(--line)}
+.now{border:1px solid var(--line);border-radius:var(--r);padding:10px;background:var(--panel-2);display:flex;flex-direction:column;gap:10px}
+.now.claude{border-color:var(--claude);box-shadow:inset 3px 0 0 var(--claude)}
+.stage-row{display:grid;grid-template-columns:84px minmax(0,1fr);gap:8px;align-items:start}
+.stage-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);padding-top:2px}
+.needs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 12px}
+.need{font-size:11px}
+.need .t{display:flex;justify-content:space-between}
+.need .b{height:5px;border-radius:3px;background:var(--line);overflow:hidden}
+.need .b i{display:block;height:100%}
+.opts{display:flex;flex-direction:column;gap:6px}
+.opt{display:flex;flex-direction:column;gap:3px}
+.opt .row{display:grid;grid-template-columns:minmax(0,1fr) 38px;gap:6px;font-size:12px;align-items:center}
+.opt .lab{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.opt .bar{display:block;height:7px;border-radius:4px;background:var(--line);overflow:hidden;grid-column:1/-1}
+.opt .bar i{display:block;height:100%;background:var(--muted)}
+.opt.win .bar i{background:var(--accent)}
+.opt.win .lab{font-weight:600}
+.why{display:flex;flex-wrap:wrap;gap:3px}
+.why span{font-size:10.5px;border-radius:4px;padding:0 5px;font-family:var(--font-mono)}
+.why .p{background:color-mix(in srgb, var(--good) 16%, transparent);color:var(--good)}
+.why .n{background:color-mix(in srgb, var(--bad) 14%, transparent);color:var(--bad)}
+.out{font-size:13px}
+.out b{font-weight:600}
+.steps{margin:0;padding-left:18px;font-size:13px}
+.badge{font-size:10.5px;border-radius:4px;padding:1px 6px;background:var(--claude);color:#fff;font-family:var(--font-mono)}
+.badge.warn{background:var(--warn)}
+.hist{display:flex;flex-direction:column;gap:4px}
+.hist button{display:grid;grid-template-columns:52px 18px minmax(0,1fr);gap:6px;text-align:left;border:1px solid transparent;background:none;border-radius:6px;padding:4px 6px;font-size:12px;align-items:start}
+.hist button:hover{background:var(--panel-2)}
+.hist button[aria-pressed="true"]{border-color:var(--line);background:var(--panel-2)}
+.hist .tk{color:var(--muted)}
+.hist .src-claude{color:var(--claude)}
+.rel{display:flex;flex-direction:column;gap:6px}
+.rel-row{display:grid;grid-template-columns:70px minmax(0,1fr) 40px;gap:8px;align-items:center;font-size:12px}
+.div-bar{position:relative;height:8px;background:var(--line);border-radius:4px}
+.div-bar::before{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--muted)}
+.div-bar i{position:absolute;top:0;bottom:0;border-radius:4px}
+.grudges{font-size:12px;display:flex;flex-direction:column;gap:3px;margin-top:6px}
+.grudge{border-left:3px solid var(--bad);padding-left:8px}
+.mem{display:flex;flex-direction:column;gap:3px;font-size:12px;max-height:240px;overflow:auto}
+.mem div{display:grid;grid-template-columns:52px minmax(0,1fr);gap:6px}
+.svgwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)}
+.svgwrap svg{display:block}
+.deep{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn-claude{border:1px solid var(--claude);color:var(--claude);background:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600}
+.btn-claude:disabled{opacity:.5;cursor:wait}
+.empty{color:var(--muted);font-size:13px}
+.matrix{border-collapse:collapse;font-size:12px}
+.matrix td,.matrix th{width:46px;height:34px;text-align:center;border:1px solid var(--panel)}
+.matrix th{font-weight:600;font-size:11px}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.stat{border:1px solid var(--line);border-radius:8px;padding:8px}
+.stat b{display:block;font-family:var(--font-display);font-size:22px}
+.stat span{font-size:11px;color:var(--muted)}
+.search-log{display:flex;flex-direction:column;gap:6px;font-size:12px}
+.search-log .q{border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.search-log .res{margin-top:2px}
+
+/* timeline */
+.timeline{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.tl-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.tl-head h2{font-size:16px}
+.filters{display:flex;gap:4px;flex-wrap:wrap}
+.tl{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:2px;font-size:13px}
+.tl button{display:grid;grid-template-columns:62px 14px minmax(0,1fr);gap:6px;text-align:left;border:0;background:none;padding:3px 4px;border-radius:5px;align-items:start}
+.tl button:hover{background:var(--panel-2)}
+.tl .ty-conflict{color:var(--bad)}
+.tl .ty-discovery{color:var(--ink);font-weight:600}
+.tl .ty-claude{color:var(--claude)}
+.tl .ty-world{color:var(--accent);font-weight:600}
+
+/* overlays */
+.flash{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:#000;color:#fff;font-family:var(--font-display);font-size:clamp(24px,5vw,48px);font-weight:800;letter-spacing:-.02em;text-align:center;padding:24px}
+.flash small{display:block;font-family:var(--font-body);font-size:14px;font-weight:400;opacity:.7;margin-top:8px}
+.banner{position:absolute;left:50%;top:14px;transform:translateX(-50%);background:var(--ink);color:var(--bg);border-radius:999px;padding:6px 16px;font-weight:600;font-size:13px;white-space:nowrap;max-width:90%;overflow:hidden;text-overflow:ellipsis}
+
+@media (max-width: 1100px){
+  .main{grid-template-columns:minmax(0,1fr)}
+  .panel{position:static;max-height:none}
+}
+@media (max-width: 640px){
+  .roster{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .brand .tag{display:none}
+}
+@media (prefers-reduced-motion: reduce){ .switch::after{transition:none} }
+</style>
+
+<header class="bar">
+  <div class="brand"><h1>Genesis Five</h1><span class="tag">five minds, from fire to Mars</span></div>
+  <div class="era" aria-live="polite">
+    <div class="era-top"><span class="era-name" id="eraName">Stone Age</span><span class="mono small" id="dayLbl">Day 0</span></div>
+    <div class="era-track" id="eraTrack"></div>
+    <div class="era-top small"><span id="knowLbl">1 of 0 discoveries</span><span id="nextLbl"></span></div>
+  </div>
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Simulation speed">
+      <button id="pauseBtn" aria-pressed="false" title="Pause / play (space)">⏸</button>
+      <button data-speed="1" aria-pressed="true">1×</button>
+      <button data-speed="4" aria-pressed="false">4×</button>
+      <button data-speed="16" aria-pressed="false">16×</button>
+      <button data-speed="64" aria-pressed="false">64×</button>
+    </div>
+    <div class="claude-box" id="claudeBox">
+      <button class="switch" id="claudeSwitch" role="switch" aria-checked="false" aria-labelledby="claudeLbl" disabled></button>
+      <label id="claudeLbl" for="claudeSwitch">Ask Claude</label>
+      <select id="modelSel" aria-label="Claude model" disabled>
+        <option value="claude-sonnet-5-5">Sonnet · medium</option>
+        <option value="claude-opus-5-5">Opus · medium</option>
+      </select>
+      <span class="small" id="claudeState">checking…</span>
+    </div>
+    <div class="wipe-wrap">
+      <button class="wipe" id="wipeBtn" aria-describedby="wipeHelp"><i class="fill" id="wipeFill"></i><span>☢ Hold to wipe everything</span></button>
+      <button class="info" id="wipeInfo" aria-expanded="false" aria-controls="wipeNote" title="What wipe does">i</button>
+    </div>
+  </div>
+</header>
+<div class="wipe-note" id="wipeNote" hidden>
+  <b>Wipe everything</b> (hold the red button 2 seconds, or press <span class="mono">Shift+Esc</span> for an instant wipe):
+  <ul id="wipeHelp">
+    <li>Stops every loop and cancels any request to Claude in flight.</li>
+    <li>Overwrites and deletes every agent's memories, thoughts, knowledge, relationships, the world map, tech tree and timeline.</li>
+    <li>Clears the screen and canvas buffers, then sweeps all browser storage for this page (none is ever written).</li>
+    <li>Reloads the page so the browser throws away the old memory, and a new Stone Age world starts with a new random seed.</li>
+  </ul>
+  <p class="small" style="margin:6px 0 0">Nothing is ever saved to disk or a server, so closing the tab also erases everything. Two limits: with Ask Claude on, thoughts already sent to Claude have left this page and can't be recalled by it. Keep it off for a sandbox with no trace. Your browser decides when freed RAM is reused.</p>
+</div>
+
+<main class="main">
+  <section class="stage">
+    <div class="world">
+      <canvas id="world" aria-label="World map with five agents. Click an agent to inspect their mind."></canvas>
+      <div class="world-hud">
+        <button class="chip" id="bondsBtn" aria-pressed="true">Bonds</button>
+        <button class="chip" id="bubblesBtn" aria-pressed="true">Thoughts</button>
+      </div>
+      <div class="banner" id="banner" hidden></div>
+      <div class="world-legend"><span style="color:var(--good)">━</span> trust &nbsp; <span style="color:var(--bad)">━</span> hostility · click an agent</div>
+    </div>
+    <div class="roster" id="roster"></div>
+    <section class="timeline">
+      <div class="tl-head">
+        <h2>Chronicle</h2>
+        <div class="filters" id="filters">
+          <button class="chip" data-f="all" aria-pressed="true">All</button>
+          <button class="chip" data-f="discovery" aria-pressed="false">Discoveries</button>
+          <button class="chip" data-f="social" aria-pressed="false">Social</button>
+          <button class="chip" data-f="conflict" aria-pressed="false">Conflict</button>
+          <button class="chip" data-f="claude" aria-pressed="false">Claude</button>
+        </div>
+      </div>
+      <div class="tl" id="tl" aria-live="off"></div>
+    </section>
+  </section>
+
+  <aside class="panel">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="mind" aria-selected="true">Mind</button>
+      <button role="tab" data-tab="tech" aria-selected="false">Tech tree</button>
+      <button role="tab" data-tab="society" aria-selected="false">Society</button>
+      <button role="tab" data-tab="archive" aria-selected="false">The Archive</button>
+    </div>
+    <div class="tabbody" id="tabbody"></div>
+  </aside>
+</main>
+
+<script>
+"use strict";
+/* ============================================================
+   Genesis Five. Everything lives in RAM inside this one script.
+   No localStorage, no IndexedDB, no cookies, no network except the
+   optional, off-by-default "Ask Claude" button.
+   ============================================================ */
+
+/* ---------- timer registry (so wipe can kill everything) ---------- */
+const TIMERS = {raf:new Set(), to:new Set(), iv:new Set(), aborts:new Set()};
+const raf = fn => { const id = requestAnimationFrame(t => { TIMERS.raf.delete(id); fn(t); }); TIMERS.raf.add(id); return id; };
+const later = (fn, ms) => { const id = setTimeout(() => { TIMERS.to.delete(id); fn(); }, ms); TIMERS.to.add(id); return id; };
+
+/* ---------- eras ---------- */
+const ERAS = ["Stone Age","Neolithic","Bronze Age","Classical","Medieval","Renaissance","Industrial","Modern","Space & Digital"];
+
+/* ---------- the offline "web": every discovery an agent can find, understand or invent ----------
+   [id, name, era, prereqs, question an agent would search, what the article says] */
+const RAW = [
+ ["fire","Fire",0,"","how to make heat and light","Strike flint or spin a stick on dry wood until it smokes. Fire keeps you warm and scares predators."],
+ ["stone_tools","Stone tools",0,"","how to cut things","Knock flakes off a hard stone to get a sharp edge for cutting and scraping."],
+ ["foraging","Foraging",0,"","which plants are safe to eat","Berries, roots and nuts can be eaten. Watch which ones animals avoid."],
+ ["language","Spoken language",0,"fire","how to share what I know","Agree on sounds for things. Around a fire, stories pass knowledge from one mind to another."],
+ ["cooking","Cooking",0,"fire,foraging","how to make food last and taste better","Heat makes meat and roots softer and safer, and you get more energy from them."],
+ ["spear","Spear",0,"stone_tools","how to reach prey from afar","Bind a sharp stone to a long stick."],
+ ["shelter","Shelter",0,"stone_tools","how to stay dry at night","Lean branches together and cover them with hides and leaves."],
+ ["rope","Rope",0,"foraging","how to tie things together","Twist plant fibres together; twisting them against each other makes them strong."],
+ ["hunting","Hunting",0,"spear,language","how to catch big animals","Hunt in groups, coordinate with calls, drive animals into traps."],
+ ["clothing","Clothing",0,"hunting,stone_tools","how to survive the cold","Scrape hides clean and wrap them around the body."],
+ ["cave_painting","Cave painting",0,"fire,language","how to remember things","Mix ochre with fat and draw on the cave wall. Pictures outlive the people who made them."],
+ ["fishing","Fishing",0,"rope,spear","how to get food from the river","Spear fish in the shallows or weave fibre into nets."],
+ ["raft","Raft",0,"rope,stone_tools","how to cross the river","Tie logs together so they float."],
+ ["agriculture","Agriculture",1,"foraging,stone_tools","how to make plants grow where I want","Save seeds, plant them in cleared soil and come back when they ripen."],
+ ["animal_husbandry","Animal herding",1,"hunting,agriculture","how to keep animals instead of chasing them","Pen young animals, feed them and they stay."],
+ ["pottery","Pottery",1,"fire,agriculture","how to store grain","Shape wet clay into pots and harden them in fire."],
+ ["weaving","Weaving",1,"rope,agriculture","how to make cloth","Cross threads over and under on a frame."],
+ ["counting","Counting",1,"language,agriculture","how many do I have","Make one notch per item. Groups of ten are easy to see."],
+ ["masonry","Masonry",1,"stone_tools,shelter","how to build walls that last","Stack shaped stones so they lock together."],
+ ["mining","Mining",1,"stone_tools,fire","where the shiny rocks come from","Follow coloured veins into the hillside. Fire cracks hard rock."],
+ ["wheel","Wheel",2,"pottery,rope","how to move heavy things","A potter's wheel turned on its side becomes a cart wheel."],
+ ["copper","Copper working",2,"mining,pottery","how to melt rock into metal","Heat green ore in a hot kiln and soft red metal runs out."],
+ ["bronze","Bronze",2,"copper,mining","how to make metal harder","Mix tin into molten copper: the alloy is harder than either metal."],
+ ["writing","Writing",2,"language,counting,pottery","how to keep words forever","Press marks into clay tablets: one sign per sound or idea."],
+ ["irrigation","Irrigation",2,"agriculture,counting","how to water fields without rain","Dig channels from the river to the fields."],
+ ["calendar","Calendar",2,"counting,agriculture","when to plant","Count the moons. The seasons repeat."],
+ ["trade","Trade",2,"counting,raft","how to get what others have","Swap surplus for what you lack. Agree on fair amounts."],
+ ["iron","Iron",3,"bronze,mining","how to make metal from common rock","Iron needs a hotter fire with bellows, and the metal is everywhere."],
+ ["mathematics","Mathematics",3,"counting,writing","how numbers relate","Add, multiply, divide and write the rules down."],
+ ["law","Written law",3,"writing,counting","how to stop people stealing","Write the rules down so everyone knows the punishment."],
+ ["currency","Currency",3,"trade,bronze","how to trade fairly","Stamped metal tokens stand for value."],
+ ["plow","Iron plow",3,"iron,animal_husbandry","how to farm more land","An ox pulling an iron blade breaks soil faster than ten people."],
+ ["geometry","Geometry",3,"mathematics,masonry","how to measure land","Triangles, circles and angles let you measure land without walking it."],
+ ["philosophy","Philosophy",3,"writing,law","why things are the way they are","Question everything and argue about it."],
+ ["astronomy","Astronomy",3,"calendar,mathematics","what the lights in the sky are","Stars move in patterns you can predict."],
+ ["medicine","Medicine",3,"foraging,writing","how to heal the sick","Record which herbs help which illness."],
+ ["sailing","Sailing",3,"raft,weaving","how to travel over water faster","Catch the wind in cloth."],
+ ["architecture","Architecture",3,"geometry,masonry","how to build big","Arches and columns carry heavy loads."],
+ ["roads","Roads",3,"wheel,masonry","how to travel faster on land","Pave the paths with stone."],
+ ["glass","Glass",3,"pottery,mining","how to make clear stone","Melt sand with ash in a very hot fire."],
+ ["paper","Paper",4,"writing,weaving","something lighter than clay to write on","Pulp fibres, press them flat and dry them."],
+ ["waterwheel","Waterwheel",4,"wheel,irrigation","how to make the river work for me","Paddles on a wheel turn in the current."],
+ ["compass","Compass",4,"iron,sailing","how to find north","A magnetised needle points the same way every time."],
+ ["alchemy","Alchemy",4,"medicine,glass","how to change one substance into another","Heat, mix and distil substances in glass vessels."],
+ ["windmill","Windmill",4,"architecture,sailing","how to grind grain without muscle","Sails on a tower turn a millstone."],
+ ["gunpowder","Black powder",4,"alchemy,fire","why some mixtures explode","Saltpetre, charcoal and sulphur burn violently. Packed in a tube, it flies."],
+ ["optics","Lenses",4,"glass,geometry","how to see small things","Curved glass bends light."],
+ ["clock","Mechanical clock",4,"astronomy,iron","how to measure time exactly","Gears and an escapement tick at a steady rate."],
+ ["banking","Banking",4,"currency,law","how to lend safely","Keep accounts and charge interest."],
+ ["printing_press","Printing press",4,"paper,iron","how to copy books fast","Movable metal letters, ink and a press."],
+ ["university","University",5,"printing_press,philosophy","where to learn everything","A place where scholars gather and teach."],
+ ["telescope","Telescope",5,"optics,astronomy","how to see far away","Two lenses in a tube make distant things look close."],
+ ["scientific_method","Scientific method",5,"philosophy,optics,university","how to know if an idea is true","Guess, test with experiments, measure, repeat."],
+ ["physics","Physics",5,"scientific_method,mathematics","why things fall","Forces cause motion. Gravity pulls everything."],
+ ["calculus","Calculus",5,"physics,mathematics","how to describe change","Slopes and areas of curves describe motion."],
+ ["chemistry","Chemistry",5,"alchemy,scientific_method","what everything is made of","Elements combine in fixed proportions."],
+ ["microscope","Microscope",5,"optics,medicine","what is too small to see","Tiny creatures live everywhere, even in water."],
+ ["navigation","Navigation",5,"compass,clock,astronomy","how to know where I am at sea","Measure star angles and keep exact time to fix your position."],
+ ["steel","Steel",6,"iron,chemistry","how to make iron stronger","Controlled carbon turns brittle iron into tough steel."],
+ ["steam_engine","Steam engine",6,"steel,physics,waterwheel","how to turn fire into motion","Boiling water pushes a piston."],
+ ["railway","Railway",6,"steam_engine,roads","how to move goods across land","Steam locomotives on steel rails."],
+ ["factory","Factory",6,"steam_engine,banking","how to make thousands of things","Machines in one building, powered by one engine."],
+ ["electricity","Electricity",6,"physics,chemistry","what lightning is","Chemical batteries push a current through wires."],
+ ["telegraph","Telegraph",6,"electricity,writing","how to send a message far, instantly","Pulses of current down a wire spell letters."],
+ ["photography","Photography",6,"optics,chemistry","how to capture an image","Light darkens silver salts."],
+ ["vaccines","Vaccines",6,"microscope,medicine,chemistry","how to stop disease spreading","A weak dose trains the body to resist."],
+ ["oil_refining","Oil refining",6,"chemistry,steam_engine","what to do with black oil","Distil crude oil into fuels."],
+ ["combustion_engine","Combustion engine",7,"oil_refining,steel,physics","a smaller engine than steam","Fuel burns inside the cylinder itself."],
+ ["light_bulb","Light bulb",7,"electricity,glass","how to light the night","Current heats a thin filament in a vacuum."],
+ ["radio","Radio",7,"electricity,telegraph,calculus","how to talk without wires","Electromagnetic waves travel through air."],
+ ["automobile","Automobile",7,"combustion_engine,roads","a personal carriage without horses","An engine turns the wheels."],
+ ["airplane","Airplane",7,"combustion_engine,physics,calculus","how to fly","Wings shaped right create lift."],
+ ["plastics","Plastics",7,"oil_refining,chemistry","a material you can mould into anything","Long chains of molecules from oil."],
+ ["antibiotics","Antibiotics",7,"vaccines,microscope","how to cure infections","Some moulds kill bacteria."],
+ ["electronics","Electronics",7,"radio,light_bulb","how to control electricity precisely","Vacuum tubes amplify and switch signals."],
+ ["nuclear_physics","Nuclear physics",7,"physics,calculus,electricity","what atoms are made of","A tiny nucleus holds huge energy."],
+ ["rocketry","Liquid-fuel rocket",7,"combustion_engine,gunpowder,calculus","how to fly without air","Burn fuel and oxidiser and throw the exhaust backwards. Action and reaction."],
+ ["transistor","Transistor",8,"electronics,chemistry","a smaller switch than a vacuum tube","Doped silicon switches current."],
+ ["computer","Computer",8,"transistor,mathematics,calculus","how to calculate faster than any mind","Millions of switches follow instructions."],
+ ["satellite","Satellite",8,"rocketry,radio,computer","how to see the whole world","Put a machine in orbit; it falls around the planet forever."],
+ ["internet","Internet",8,"computer,radio,telegraph","how to connect every mind","Computers send packets to each other around the world."],
+ ["space_flight","Human spaceflight",8,"satellite,airplane,medicine","can a person go to space","A capsule, life support and a big rocket."],
+ ["ai","Artificial intelligence",8,"internet,computer,philosophy","can machines think","Learning patterns from data."],
+ ["moon_landing","Moon landing",8,"space_flight,navigation","how to reach the Moon","Leave orbit, land softly, and come back."],
+ ["reusable_rocket","Reusable rocket",8,"moon_landing,ai,steel","how to make spaceflight cheap","Land the booster and fly it again."],
+ ["mars_mission","Mars mission",8,"reusable_rocket,nuclear_physics,antibiotics","how to live on another planet","Months in transit, then a new home under a red sky."],
+];
+let CORPUS = [], BY = {};
+function buildCorpus(){
+  CORPUS = RAW.map(r => ({id:r[0], name:r[1], era:r[2], pre:r[3]?r[3].split(","):[], q:r[4], blurb:r[5], custom:false}));
+  BY = {}; CORPUS.forEach(d => BY[d.id] = d);
+}
+
+/* buildings: unlocked by a discovery, cost materials, give a bonus */
+const BUILDINGS = [
+ {id:"campfire", need:"fire", cost:2, icon:"🔥", name:"Campfire", bonus:"rest"},
+ {id:"hut", need:"shelter", cost:4, icon:"🛖", name:"Hut", bonus:"rest"},
+ {id:"farm", need:"agriculture", cost:5, icon:"🌾", name:"Farm", bonus:"food"},
+ {id:"kiln", need:"pottery", cost:5, icon:"🏺", name:"Kiln", bonus:"food"},
+ {id:"forge", need:"bronze", cost:8, icon:"⚒️", name:"Forge", bonus:"mat"},
+ {id:"tablets", need:"writing", cost:6, icon:"📜", name:"Scribe house", bonus:"search"},
+ {id:"academy", need:"philosophy", cost:10, icon:"🏛️", name:"Academy", bonus:"invent"},
+ {id:"mill", need:"windmill", cost:10, icon:"🌀", name:"Windmill", bonus:"food"},
+ {id:"press", need:"printing_press", cost:12, icon:"📚", name:"Print shop", bonus:"search"},
+ {id:"observatory", need:"telescope", cost:12, icon:"🔭", name:"Observatory", bonus:"invent"},
+ {id:"factory", need:"factory", cost:16, icon:"🏭", name:"Factory", bonus:"mat"},
+ {id:"power", need:"electricity", cost:16, icon:"⚡", name:"Power station", bonus:"invent"},
+ {id:"tower", need:"radio", cost:16, icon:"📡", name:"Radio tower", bonus:"search"},
+ {id:"lab", need:"computer", cost:20, icon:"🖥️", name:"Computer lab", bonus:"invent"},
+ {id:"pad", need:"rocketry", cost:22, icon:"🚀", name:"Launch pad", bonus:"invent"},
+];
+
+/* ---------- seeded RNG ---------- */
+function mulberry32(a){ return function(){ a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+let rnd = Math.random;
+const pick = arr => arr[Math.floor(rnd()*arr.length)];
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+function wpick(items, w){ let s = 0; const ws = items.map(x => { const v = Math.max(0, w(x)); s += v; return v; }); if (s <= 0) return null; let r = rnd()*s; for (let i=0;i<items.length;i++){ r -= ws[i]; if (r <= 0) return items[i]; } return items[items.length-1]; }
+
+/* ---------- world geography (logical 1000 x 625) ---------- */
+const W = 1000, H = 625;
+const LOC = {
+  archive:{x:500,y:300,name:"The Archive"}, plaza:{x:500,y:430,name:"the gathering place"},
+  forest:{x:165,y:150,name:"the forest"}, river:{x:820,y:360,name:"the river"},
+  mountain:{x:860,y:110,name:"the mountain"}, fields:{x:240,y:480,name:"the fields"},
+};
+const HOMES = [{x:320,y:205},{x:680,y:200},{x:340,y:535},{x:660,y:530},{x:120,y:330}];
+
+/* ---------- agents ---------- */
+const ARCHETYPES = [
+  {name:"Mira", color:"#e4572e", face:"🧑🏽", tr:{curiosity:.9, creativity:.6, cooperation:.6, aggression:.15, vengefulness:.3}, role:"the seeker"},
+  {name:"Tesh", color:"#2e86ab", face:"🧔🏻", tr:{curiosity:.4, creativity:.4, cooperation:.25, aggression:.75, vengefulness:.85}, role:"the hothead"},
+  {name:"Oru",  color:"#3bb273", face:"👩🏿", tr:{curiosity:.5, creativity:.45, cooperation:.9, aggression:.1, vengefulness:.15}, role:"the teacher"},
+  {name:"Kael", color:"#d1a10f", face:"🧑🏼", tr:{curiosity:.6, creativity:.95, cooperation:.45, aggression:.3, vengefulness:.45}, role:"the inventor"},
+  {name:"Ilo",  color:"#9b5de5", face:"👱🏽", tr:{curiosity:.55, creativity:.5, cooperation:.4, aggression:.55, vengefulness:.6}, role:"the opportunist"},
+];
+const TRAITS = ["curiosity","creativity","cooperation","aggression","vengefulness"];
+
+let S = null;   // the ONLY root of simulation state
+let UI = {sel:0, tab:"mind", filter:"all", histSel:null, bonds:true, bubbles:true, speed:1, paused:false, dirty:true};
+
+function newWorld(){
+  const seedArr = new Uint32Array(1); crypto.getRandomValues(seedArr);
+  const seed = seedArr[0];
+  rnd = mulberry32(seed);
+  buildCorpus();
+  const agents = ARCHETYPES.map((a, i) => {
+    const tr = {}; TRAITS.forEach(t => tr[t] = clamp(a.tr[t] + (rnd()-.5)*.2, .03, .98));
+    const home = HOMES[i];
+    return {
+      i, name:a.name, color:a.color, face:a.face, role:a.role, tr,
+      x:home.x, y:home.y, dx:home.x, dy:home.y, home,
+      needs:{hunger:20+rnd()*20, fatigue:10+rnd()*20, loneliness:30+rnd()*20},
+      food:3, mats:1, known:new Set(["fire"]), learnedAt:{fire:0}, wish:[],
+      trust:Array(5).fill(0).map((_,j) => j===i?0:Math.round((rnd()-.5)*20)),
+      grudges:[], allies:new Set(), buildings:[],
+      act:null, thoughts:[], mem:[], bubble:"", bubbleT:0, mood:"🙂",
+      goal:null, stats:{invented:0, learned:0, stolen:0, revenge:0, taught:0}, deep:false,
+    };
+  });
+  S = {
+    seed, tick:0, agents, events:[], searches:[],
+    worldKnown:new Set(["fire"]), firstBy:{fire:-1}, era:0,
+    lawKnown:false, particles:[], rockets:[], marsBanner:false,
+    counts:{thefts:0, caught:0, revenge:0, gifts:0, taught:0, apologies:0, alliances:0, sabotage:0},
+    customCount:0,
+  };
+  agents.forEach(a => remember(a, "I woke up by the fire. I know how to make fire, and nothing else.", "self"));
+  log("world", -1, "Five people wake up beside a fire. Fire is all they know.");
+}
+
+/* ---------- logging ---------- */
+function log(type, ai, text){
+  S.events.push({t:S.tick, type, ai, text});
+  if (S.events.length > 600) S.events.splice(0, S.events.length - 600);
+  UI.dirty = true;
+}
+function remember(a, text, kind){
+  a.mem.push({t:S.tick, text, kind});
+  if (a.mem.length > 120) a.mem.splice(0, a.mem.length - 120);
+}
+function say(a, text, ttl=60){ a.bubble = text; a.bubbleT = ttl; }
+
+/* ---------- knowledge helpers ---------- */
+const knows = (a, id) => a.known.has(id);
+const reachable = a => CORPUS.filter(d => !a.known.has(d.id) && d.pre.every(p => a.known.has(p)));
+const missingFor = (a, d) => d.pre.filter(p => !a.known.has(p));
+function learn(a, id, how){
+  if (a.known.has(id)) return false;
+  a.known.add(id); a.learnedAt[id] = S.tick; a.stats.learned++;
+  a.wish = a.wish.filter(w => w !== id);
+  const d = BY[id];
+  let first = false;
+  if (!S.worldKnown.has(id)){
+    S.worldKnown.add(id); S.firstBy[id] = a.i; first = true;
+    if (d.era > S.era){ S.era = d.era; log("world", a.i, `A new age begins: the ${ERAS[S.era]}. ${a.name} led the way with ${d.name}.`); banner(`The ${ERAS[S.era]} begins`); }
+    if (id === "law"){ S.lawKnown = true; log("world", a.i, `${a.name} wrote down the first laws. Theft is now punished in this society.`); }
+    if (id === "mars_mission" && !S.marsBanner){ S.marsBanner = true; banner("Civilization reached Mars 🔴"); log("world", a.i, "From a single campfire to another planet. The five have reached Mars."); }
+  }
+  burst(a.x, a.y - 20, first ? "#ffd166" : "#9ad1ff", first ? 26 : 10);
+  return first;
+}
+function canBuild(a){
+  return BUILDINGS.filter(b => a.known.has(b.need) && !a.buildings.some(x => x.id === b.id));
+}
+function hasBonus(a, kind){ return a.buildings.filter(b => !b.broken && BUILDINGS.find(x => x.id===b.id).bonus === kind).length; }
+
+/* ---------- decision making: utility scores with visible reasons ---------- */
+const ACTION_LABEL = {
+  eat:"Eat", gather_food:"Gather food", gather_mat:"Gather materials", rest:"Rest",
+  search:"Search the Archive", think:"Think & invent", build:"Build", teach:"Teach",
+  chat:"Talk", trade:"Trade", steal:"Steal from", revenge:"Take revenge on", apologize:"Apologize to", ally:"Propose alliance with",
+  sabotage:"Sabotage",
+};
+function optionsFor(a){
+  const n = a.needs, t = a.tr, opts = [];
+  const add = (action, target, reasons, extra={}) => {
+    if (a.goal && a.goal.action === action && (a.goal.target == null || a.goal.target === target)) reasons.push(["goal from deep thought", 22]);
+    reasons.push(["whim", Math.round(rnd()*8)]);
+    const score = Math.max(0, Math.round(reasons.reduce((s,r)=>s+r[1],0)));
+    opts.push({action, target, score, reasons:reasons.filter(r => Math.round(r[1]) !== 0).map(r => [r[0], Math.round(r[1])]), ...extra});
+  };
+  const lang = knows(a,"language");
+  // body
+  if (a.food > 0) add("eat", null, [["hunger "+Math.round(n.hunger), n.hunger*0.95], n.hunger < 30 ? ["not hungry yet",-20] : ["",0]]);
+  add("gather_food", null, [["hunger", n.hunger*0.45], ["food stock "+a.food, a.food<2?28:a.food<5?12:-12]]);
+  const bl = canBuild(a);
+  const nextB = bl[0];
+  add("gather_mat", null, [nextB ? ["needs "+nextB.cost+" materials for "+nextB.name, a.mats < nextB.cost ? 22 : -8] : ["nothing to build", -6], ["materials "+a.mats, a.mats<3?8:0]]);
+  add("rest", null, [["fatigue "+Math.round(n.fatigue), n.fatigue*0.85], n.fatigue<30?["not tired",-15]:["",0]]);
+  // mind
+  const reach = reachable(a);
+  const libBonus = hasBonus(a,"search")*6 + (S.worldKnown.has("writing")?6:0);
+  add("search", null, [["curiosity "+t.curiosity.toFixed(2), t.curiosity*42], a.wish.length ? ["wants to understand "+BY[a.wish[0]]?.name, 14] : ["",0], ["the Archive is richer now", libBonus], ["too hungry to focus", -Math.max(0, n.hunger-60)*0.7], ["too tired", -Math.max(0,n.fatigue-65)*0.6]]);
+  add("think", null, [["creativity "+t.creativity.toFixed(2), t.creativity*40], reach.length ? ["ideas within reach: "+reach.length, Math.min(reach.length,5)*4] : ["nothing new to combine", -28], ["workshop bonus", hasBonus(a,"invent")*5], ["too hungry to think", -Math.max(0,n.hunger-60)*0.7], ["tired", -n.fatigue*0.2]]);
+  if (nextB && a.mats >= nextB.cost) add("build", null, [["can build "+nextB.name, 34], ["ambition", t.creativity*10]], {building:nextB.id});
+  // society
+  for (const b of S.agents){
+    if (b === a) continue;
+    const tr = a.trust[b.i], trB = b.trust[a.i];
+    const canTeach = [...a.known].filter(id => !b.known.has(id));
+    if (canTeach.length) add("teach", b.i, [["generous nature", t.cooperation*30], ["trust in "+b.name+" "+tr, tr*0.22], ["lonely", n.loneliness*0.2], lang?["",0]:["no shared language yet", -12], tr < -30 ? ["refuses to help an enemy", -30] : ["",0]]);
+    add("chat", b.i, [["lonely "+Math.round(n.loneliness), n.loneliness*0.6], ["likes "+b.name, tr*0.15], tr < -40 ? ["avoids "+b.name, -25] : ["",0]]);
+    if (a.food > 4 && b.mats > 3 || a.mats > 4 && b.food > 3) add("trade", b.i, [["surplus to swap", 14], ["knows trade", knows(a,"trade")?12:0], ["trust", Math.min(tr,30)*0.2]]);
+    const loot = b.food > 2 || b.mats > 2 || [...b.known].some(id => !a.known.has(id));
+    const allied = a.allies.has(b.i);
+    const envy = clamp((b.food + b.mats) - (a.food + a.mats), 0, 12)*1.6;
+    if (loot) add("steal", b.i, [["aggression "+t.aggression.toFixed(2), t.aggression*38], ["envy of "+b.name, envy*t.aggression*1.6], ["hunger", b.food>2 ? n.hunger*0.45 : 0], ["distrusts "+b.name, Math.max(0,-tr)*0.3], ["fear of getting caught", -(1-t.aggression)*22], S.lawKnown?["the law punishes theft", -22]:["",0], allied?["would betray an ally", -45]:["",0], ["conscience", -t.cooperation*18], ["just stole recently", a.lastSteal && S.tick - a.lastSteal < 120 ? -30 : 0]]);
+    const g = a.grudges.find(x => x.against === b.i && x.sev > 0);
+    if (g) add("revenge", b.i, [["grudge: "+g.reason, g.sev*0.7], ["vengeful "+t.vengefulness.toFixed(2), t.vengefulness*34], ["cooler head", -t.cooperation*18], ["tired of fighting", a.lastRevenge && S.tick - a.lastRevenge < 200 ? -28 : 0], S.lawKnown?["revenge is against the law", -10]:["",0]], {grudge:g.reason});
+    const theirG = b.grudges.find(x => x.against === a.i && x.sev > 0);
+    if (theirG) add("apologize", b.i, [["guilt about "+theirG.reason, t.cooperation*28], ["wants peace with "+b.name, theirG.sev*0.25], ["pride", -t.aggression*20]]);
+    if (!allied && tr > 50 && trB > 45) add("ally", b.i, [["mutual trust "+tr+"/"+trB, 32], ["safety in numbers", (a.grudges.length?10:0)]]);
+  }
+  opts.sort((x,y) => y.score - x.score);
+  return opts;
+}
+
+function decide(a){
+  const opts = optionsFor(a);
+  const best = opts[0];
+  const trace = {
+    t:S.tick, src:"brain",
+    needs:{hunger:Math.round(a.needs.hunger), fatigue:Math.round(a.needs.fatigue), loneliness:Math.round(a.needs.loneliness), food:a.food, mats:a.mats},
+    options:opts.slice(0, 8), chosen:best, outcome:"…", learned:null,
+    label: labelOf(best),
+  };
+  a.thoughts.push(trace);
+  if (a.thoughts.length > 60) a.thoughts.shift();
+  if (a.goal && S.tick > a.goal.until) a.goal = null;
+  start(a, best, trace);
+}
+function labelOf(o){
+  const tn = o.target != null ? " " + S.agents[o.target].name : "";
+  if (o.action === "build") return "Build " + BUILDINGS.find(b=>b.id===o.building).name;
+  return ACTION_LABEL[o.action] + tn;
+}
+
+/* ---------- starting and finishing actions ---------- */
+function start(a, o, trace){
+  const tb = o.target != null ? S.agents[o.target] : null;
+  let dest = a.home, dur = 10, bubble = "";
+  switch (o.action){
+    case "eat": dest = a.home; dur = 4; bubble = "🍖 time to eat"; break;
+    case "gather_food": {
+      const spot = knows(a,"agriculture") ? LOC.fields : knows(a,"fishing") && rnd()<.5 ? LOC.river : LOC.forest;
+      dest = jitter(spot, 40); dur = 12; bubble = knows(a,"agriculture") ? "🌾 tending the fields" : spot === LOC.river ? "🎣 fishing" : "🫐 looking for food"; break; }
+    case "gather_mat": dest = jitter(rnd()<.5?LOC.mountain:LOC.forest, 40); dur = 12; bubble = "🪨 collecting materials"; break;
+    case "rest": dest = a.home; dur = 14; bubble = "💤 resting"; break;
+    case "search": {
+      const art = chooseArticle(a);
+      o.article = art ? art.id : null;
+      dest = jitter(LOC.archive, 30); dur = 14;
+      bubble = art ? `🔍 "${art.q}?"` : "🔍 browsing the Archive"; break; }
+    case "think": {
+      const reach = reachable(a);
+      const idea = reach.length ? wpick(reach, d => 1 + (a.wish.includes(d.id)?3:0) + (S.worldKnown.has(d.id)?0:1)) : null;
+      o.idea = idea ? idea.id : null;
+      dur = 18; dest = {x:a.x, y:a.y};
+      if (idea){ const pr = idea.pre.length ? idea.pre.map(p=>BY[p].name).join(" + ") : "nature"; bubble = `💡 ${pr} → ?`; }
+      else bubble = "🤔 hmm…"; break; }
+    case "build": dest = a.home; dur = 16; bubble = "🔨 building " + BUILDINGS.find(b=>b.id===o.building).name; break;
+    case "teach": dest = near(tb); dur = 10; bubble = `🗣 showing ${tb.name} something`; break;
+    case "chat": dest = rnd()<.5 ? jitter(LOC.plaza, 30) : near(tb); dur = 8; bubble = `💬 chatting with ${tb.name}`; break;
+    case "trade": dest = jitter(LOC.plaza, 25); dur = 8; bubble = `🤝 trading with ${tb.name}`; break;
+    case "steal": dest = jitter(tb.home, 18); dur = 6; bubble = `🤫 ${tb.name} won't notice…`; break;
+    case "revenge": dest = jitter(tb.home, 18); dur = 8; bubble = `😠 ${tb.name} will pay for ${o.grudge}`; break;
+    case "apologize": dest = near(tb); dur = 8; bubble = `🙏 I owe ${tb.name} an apology`; break;
+    case "ally": dest = near(tb); dur = 8; bubble = `🤝 ${tb.name}, let's stand together`; break;
+  }
+  a.act = {o, trace, dest, dur, left:dur, arrived:false};
+  say(a, bubble, 999);
+  a.mood = moodOf(a, o.action);
+}
+const jitter = (p, r) => ({x:p.x + (rnd()-.5)*r*2, y:p.y + (rnd()-.5)*r*2});
+const near = b => ({x:b.x + (rnd()<.5?-24:24), y:b.y + 6});
+
+function chooseArticle(a){
+  const unk = CORPUS.filter(d => !a.known.has(d.id));
+  return wpick(unk, d => {
+    const miss = missingFor(a, d).length;
+    let w = miss === 0 ? 7 : miss === 1 ? 2 : 0.35;
+    if (a.wish.includes(d.id)) w += 5;
+    if (S.worldKnown.has(d.id)) w += 2;
+    return w;
+  });
+}
+
+function finish(a){
+  const {o, trace} = a.act;
+  const tb = o.target != null ? S.agents[o.target] : null;
+  let out = "", learned = null;
+  const n = a.needs;
+  switch (o.action){
+    case "eat": {
+      a.food--; const gain = knows(a,"cooking") ? 55 : 42; n.hunger = Math.max(0, n.hunger - gain);
+      out = knows(a,"cooking") ? "Ate a cooked meal. Cooking makes food go further." : "Ate raw food. Still a bit hungry."; break; }
+    case "gather_food": {
+      let y = 2 + (knows(a,"spear")?1:0) + (knows(a,"hunting")?1:0) + (knows(a,"fishing")?1:0) + (knows(a,"agriculture")?2:0) + (knows(a,"irrigation")?1:0) + (knows(a,"plow")?2:0) + (knows(a,"animal_husbandry")?1:0) + hasBonus(a,"food")*2 + (knows(a,"factory")?2:0);
+      y = Math.max(1, Math.round(y * (0.6 + rnd()*0.7))); a.food += y; out = `Gathered ${y} food.`; break; }
+    case "gather_mat": {
+      let y = 1 + (knows(a,"stone_tools")?1:0) + (knows(a,"mining")?1:0) + (knows(a,"bronze")?1:0) + (knows(a,"iron")?2:0) + (knows(a,"steel")?2:0) + (knows(a,"steam_engine")?2:0) + hasBonus(a,"mat")*3;
+      y = Math.max(1, Math.round(y * (0.6 + rnd()*0.7))); a.mats += y; out = `Collected ${y} materials.`; break; }
+    case "rest": n.fatigue = Math.max(0, n.fatigue - (45 + hasBonus(a,"rest")*15)); out = "Rested and feel stronger."; break;
+    case "search": {
+      const d = o.article ? BY[o.article] : null;
+      if (!d){ out = "Found nothing new in the Archive."; break; }
+      const miss = missingFor(a, d);
+      const entry = {t:S.tick, ai:a.i, q:d.q, id:d.id, res:"", ok:false, miss:[]};
+      if (miss.length){
+        out = `Read about ${d.name}, but it is too advanced. Missing: ${miss.map(m=>BY[m].name).join(", ")}.`;
+        entry.res = "too advanced"; entry.miss = miss;
+        for (const m of miss) if (!a.wish.includes(m) && a.wish.length < 4) a.wish.push(m);
+        trace.learned = "Learned what to study next: " + miss.map(m=>BY[m].name).join(", ");
+      } else {
+        const known = S.worldKnown.has(d.id);
+        const p = (known ? 0.55 : 0.3) + a.tr.curiosity*0.25 + hasBonus(a,"search")*0.06 + (knows(a,"writing")?0.08:0) - d.era*0.012;
+        if (rnd() < p){
+          const first = learn(a, d.id, "search"); learned = d.id;
+          out = first ? `Understood ${d.name} from the Archive before anyone else! "${d.blurb}"` : `Understood ${d.name}: "${d.blurb}"`;
+          entry.res = first ? "understood (world first)" : "understood"; entry.ok = true;
+          log("discovery", a.i, first ? `${a.name} discovered ${d.name} by searching the Archive.` : `${a.name} learned ${d.name} from the Archive.`);
+          remember(a, `I learned ${d.name} by searching "${d.q}".`, "learn");
+        } else { out = `Read about ${d.name} but could not quite grasp it yet.`; entry.res = "almost"; }
+      }
+      S.searches.push(entry); if (S.searches.length > 80) S.searches.shift();
+      break; }
+    case "think": {
+      const d = o.idea ? BY[o.idea] : null;
+      if (!d){ out = "Thought hard, but nothing new came to mind."; break; }
+      const p = 0.1 + a.tr.creativity*0.26 + hasBonus(a,"invent")*0.04 + Math.min(a.known.size, 40)*0.002 - d.era*0.018;
+      if (rnd() < p){
+        const first = learn(a, d.id, "invent"); learned = d.id;
+        if (first){ a.stats.invented++; out = `EUREKA! Invented ${d.name} by combining ${d.pre.map(x=>BY[x].name).join(" + ") || "observation"}.`; log("discovery", a.i, `💡 ${a.name} invented ${d.name}.`); remember(a, `I invented ${d.name}! Nobody knew it before me.`, "invent"); a.mood = "🤩"; }
+        else { out = `Figured out ${d.name} independently.`; log("discovery", a.i, `${a.name} independently figured out ${d.name}.`); remember(a, `I figured out ${d.name} on my own.`, "learn"); }
+      } else out = `Tried to combine ${d.pre.map(x=>BY[x].name).join(" + ")}. Not there yet.`;
+      n.fatigue += 6; break; }
+    case "build": {
+      const b = BUILDINGS.find(x => x.id === o.building);
+      if (a.mats >= b.cost){
+        a.mats -= b.cost;
+        const k = a.buildings.length, ang = k*1.25 + a.i;
+        a.buildings.push({id:b.id, x:a.home.x + Math.cos(ang)*(46+k*4), y:a.home.y + Math.sin(ang)*(34+k*3), broken:false});
+        out = `Built a ${b.name}.`; log("social", a.i, `${a.name} built a ${b.name} ${b.icon}.`); remember(a, `I built a ${b.name}.`, "build");
+        puff(a.home.x, a.home.y);
+      } else out = "Didn't have enough materials after all."; break; }
+    case "teach": {
+      const cands = [...a.known].filter(id => !tb.known.has(id));
+      if (!cands.length){ out = `${tb.name} already knows everything I know.`; break; }
+      const id = wpick(cands, x => 1 + (tb.wish.includes(x)?5:0) + (missingFor(tb, BY[x]).length===0?3:0));
+      const d = BY[id];
+      if (missingFor(tb, d).length){ out = `Tried to explain ${d.name} to ${tb.name}, but it needs ideas they don't have yet.`; bump(tb, a.i, 3); break; }
+      const p = (knows(a,"language")&&knows(tb,"language") ? 0.65 : 0.3) + (knows(a,"writing")?0.15:0) + (tb.trust[a.i] > 0 ? 0.1 : -0.1);
+      if (rnd() < p){
+        learn(tb, id, "taught"); learned = id;
+        bump(tb, a.i, 12); bump(a, tb.i, 4); a.stats.taught++; S.counts.taught++;
+        tb.needs.loneliness = Math.max(0, tb.needs.loneliness - 20);
+        out = `Taught ${tb.name} about ${d.name}.`;
+        log("social", a.i, `${a.name} taught ${tb.name} ${d.name}.`);
+        remember(a, `I taught ${tb.name} ${d.name}.`, "teach"); remember(tb, `${a.name} taught me ${d.name}. Kind of them.`, "learn");
+        tb.thoughts.length && say(tb, `🙂 ${a.name} showed me ${d.name}`, 40);
+      } else { out = `Tried to teach ${tb.name} ${d.name}; it didn't stick.`; bump(tb, a.i, 3); }
+      n.loneliness = Math.max(0, n.loneliness - 25); break; }
+    case "chat": {
+      n.loneliness = Math.max(0, n.loneliness - 40); tb.needs.loneliness = Math.max(0, tb.needs.loneliness - 25);
+      bump(a, tb.i, 4); bump(tb, a.i, 3);
+      out = `Talked with ${tb.name}.`;
+      const g = a.grudges.filter(x => x.sev > 15 && x.against !== tb.i)[0];
+      if (g && rnd() < .6){ const who = S.agents[g.against]; bump(tb, who.i, -8); out += ` Told ${tb.name} that ${who.name} ${g.reason}.`; log("social", a.i, `${a.name} gossiped to ${tb.name} about ${who.name}.`); remember(tb, `${a.name} says ${who.name} ${g.reason}.`, "gossip"); }
+      else if (a.thoughts.length > 2 && rnd() < .3){ const ids = [...a.known].filter(x=>!tb.known.has(x) && missingFor(tb, BY[x]).length===0); if (ids.length && knows(a,"language")){ const id = pick(ids); learn(tb, id, "chat"); learned = id; out += ` ${tb.name} picked up ${BY[id].name} from the conversation.`; log("social", tb.i, `${tb.name} picked up ${BY[id].name} while talking with ${a.name}.`); } }
+      break; }
+    case "trade": {
+      if (a.food > 4 && tb.mats > 3){ a.food -= 2; tb.food += 2; tb.mats -= 2; a.mats += 2; out = `Swapped 2 food for 2 materials with ${tb.name}.`; }
+      else if (a.mats > 4 && tb.food > 3){ a.mats -= 2; tb.mats += 2; tb.food -= 2; a.food += 2; out = `Swapped 2 materials for 2 food with ${tb.name}.`; }
+      else { out = `${tb.name} had nothing to trade.`; break; }
+      bump(a, tb.i, 6); bump(tb, a.i, 6); S.counts.gifts++; log("social", a.i, `${a.name} and ${tb.name} traded.`); break; }
+    case "steal": out = doSteal(a, tb, trace); learned = trace._learned || null; break;
+    case "revenge": out = doRevenge(a, tb); break;
+    case "apologize": {
+      const g = tb.grudges.find(x => x.against === a.i && x.sev > 0);
+      const gift = Math.min(2, a.food);
+      a.food -= gift; tb.food += gift; S.counts.apologies++;
+      if (g && rnd() < 0.35 + tb.tr.cooperation*0.5 - tb.tr.vengefulness*0.25){
+        g.sev = 0; bump(tb, a.i, 18); bump(a, tb.i, 8);
+        out = `Apologized to ${tb.name} with ${gift} food. ${tb.name} forgave me.`;
+        log("social", a.i, `${a.name} apologized to ${tb.name}, and was forgiven.`);
+        remember(tb, `${a.name} apologized. I forgave them.`, "forgive");
+      } else { if (g) g.sev *= 0.75; bump(tb, a.i, 4); out = `Apologized to ${tb.name}. They are not ready to forgive.`; log("social", a.i, `${a.name} apologized to ${tb.name}, who refused to forgive.`); }
+      break; }
+    case "ally": {
+      a.allies.add(tb.i); tb.allies.add(a.i); S.counts.alliances++;
+      bump(a, tb.i, 10); bump(tb, a.i, 10);
+      out = `${tb.name} and I are now allies.`; log("social", a.i, `🤝 ${a.name} and ${tb.name} formed an alliance.`);
+      remember(a, `I formed an alliance with ${tb.name}.`, "ally"); remember(tb, `${a.name} and I are allies now.`, "ally");
+      hearts(a.x, a.y); break; }
+  }
+  trace.outcome = out;
+  if (learned){ const d = BY[learned]; trace.learned = `New knowledge: ${d.name}. ${d.blurb}`; a.wish = a.wish.filter(w=>w!==learned); }
+  say(a, outcomeBubble(o, out), 55);
+  a.act = null;
+}
+function outcomeBubble(o, out){
+  const s = out.length > 70 ? out.slice(0, 67) + "…" : out;
+  return s;
+}
+function bump(a, j, d){ a.trust[j] = clamp(Math.round(a.trust[j] + d), -100, 100); }
+function addGrudge(victim, against, reason, sev){
+  const g = victim.grudges.find(x => x.against === against);
+  if (g){ g.sev = clamp(g.sev + sev, 0, 100); g.reason = reason; g.t = S.tick; }
+  else victim.grudges.push({against, reason, sev, t:S.tick});
+  victim.mood = "😠";
+}
+function witnesses(a, tb){ return S.agents.filter(c => c !== a && c !== tb && Math.hypot(c.x - a.x, c.y - a.y) < 170); }
+
+function doSteal(a, tb, trace){
+  S.counts.thefts++; a.stats.stolen++; a.lastSteal = S.tick;
+  let what;
+  const ideas = [...tb.known].filter(id => !a.known.has(id) && missingFor(a, BY[id]).length === 0);
+  if (tb.food > 2 && (a.needs.hunger > 40 || rnd() < .5)){ const k = Math.min(tb.food - 1, 2 + Math.floor(rnd()*2)); tb.food -= k; a.food += k; what = `${k} food`; }
+  else if (ideas.length && rnd() < .5){ const id = pick(ideas); learn(a, id, "steal"); trace._learned = id; what = `the secret of ${BY[id].name}`; }
+  else if (tb.mats > 2){ const k = Math.min(tb.mats - 1, 3); tb.mats -= k; a.mats += k; what = `${k} materials`; }
+  else what = "a few scraps";
+  const ws = witnesses(a, tb);
+  const caught = rnd() < 0.35 + (Math.hypot(tb.x - a.x, tb.y - a.y) < 90 ? 0.3 : 0) + ws.length*0.1;
+  let out = `Stole ${what} from ${tb.name}.`;
+  if (caught){
+    S.counts.caught++;
+    addGrudge(tb, a.i, `stole ${what}`, 35 + tb.tr.vengefulness*20);
+    bump(tb, a.i, -35);
+    tb.allies.forEach(j => { if (j !== a.i){ const al = S.agents[j]; bump(al, a.i, -12); addGrudge(al, a.i, `stole from my ally ${tb.name}`, 12); } });
+    ws.forEach(w => { bump(w, a.i, -10); remember(w, `I saw ${a.name} steal from ${tb.name}.`, "witness"); });
+    remember(tb, `${a.name} stole ${what} from me. I won't forget.`, "wronged");
+    say(tb, `😡 ${a.name} stole from me!`, 70);
+    out += ` ${tb.name} caught me!`;
+    if (S.lawKnown){ const fine = Math.min(a.food, 3); a.food -= fine; tb.food += fine; S.agents.forEach(c => { if (c !== a) bump(c, a.i, -6); }); out += ` By law I had to pay back ${fine} food.`; log("conflict", a.i, `⚖️ ${a.name} was caught stealing ${what} from ${tb.name} and punished under the law.`); }
+    else log("conflict", a.i, `${a.name} stole ${what} from ${tb.name} and was caught.`);
+    shards(a.x, a.y);
+  } else {
+    log("conflict", a.i, `${a.name} secretly stole ${what} from ${tb.name}.`);
+    remember(a, `I stole ${what} from ${tb.name}. Nobody saw.`, "steal");
+  }
+  return out;
+}
+function doRevenge(a, tb){
+  const g = a.grudges.find(x => x.against === tb.i);
+  if (!g) return "The anger faded.";
+  S.counts.revenge++; a.stats.revenge++; a.lastRevenge = S.tick;
+  const intact = tb.buildings.filter(b => !b.broken);
+  let deed;
+  if (intact.length && rnd() < .55){ const b = pick(intact); b.broken = true; S.counts.sabotage++; deed = `wrecked ${tb.name}'s ${BUILDINGS.find(x=>x.id===b.id).name}`; shards(b.x, b.y); }
+  else if (tb.food > 1 && rnd() < .6){ const k = Math.min(tb.food, 3); tb.food -= k; deed = `spoiled ${k} of ${tb.name}'s food`; }
+  else { S.agents.forEach(c => { if (c !== a && c !== tb) bump(c, tb.i, -7); }); deed = `turned everyone against ${tb.name} with rumours`; }
+  const before = g.sev;
+  g.sev = Math.max(0, g.sev - 40);
+  addGrudge(tb, a.i, `${deed.replace(tb.name+"'s","my").replace("against "+tb.name,"against me")}`, 25 + tb.tr.vengefulness*20);
+  bump(tb, a.i, -25);
+  log("conflict", a.i, `😠 Revenge: ${a.name} ${deed} (for "${g.reason}").`);
+  remember(a, `I took revenge on ${tb.name}: I ${deed}.`, "revenge");
+  remember(tb, `${a.name} ${deed.replace(tb.name+"'s","my")}. This isn't over.`, "wronged");
+  say(tb, `😤 ${a.name}!`, 60);
+  return `Revenge: ${deed}. My grudge went from ${Math.round(before)} to ${Math.round(g.sev)}, but ${tb.name} is angry now.`;
+}
+
+function moodOf(a, action){
+  if (a.needs.hunger > 75) return "😫";
+  if (action === "revenge") return "😠";
+  if (action === "steal") return "😏";
+  if (a.grudges.some(g => g.sev > 40)) return "😒";
+  if (action === "think" || action === "search") return "🤔";
+  if (a.needs.loneliness > 70) return "😔";
+  if (["teach","chat","ally","trade"].includes(action)) return "😊";
+  return "🙂";
+}
+
+/* ---------- main tick ---------- */
+function step(){
+  S.tick++;
+  for (const a of S.agents){
+    a.needs.hunger = clamp(a.needs.hunger + 0.24, 0, 100);
+    a.needs.fatigue = clamp(a.needs.fatigue + 0.2, 0, 100);
+    a.needs.loneliness = clamp(a.needs.loneliness + 0.16 * (0.5 + a.tr.cooperation), 0, 100);
+    for (const g of a.grudges) g.sev = Math.max(0, g.sev - 0.012 * (1.1 - a.tr.vengefulness));
+    a.grudges = a.grudges.filter(g => g.sev > 0.5 || S.tick - g.t < 50);
+    if (a.bubbleT < 999) a.bubbleT--;
+    if (!a.act){ decide(a); continue; }
+    const act = a.act;
+    if (!act.arrived){
+      const dx = act.dest.x - a.x, dy = act.dest.y - a.y, d = Math.hypot(dx, dy);
+      const sp = 10 + (knows(a,"wheel")?2:0) + (knows(a,"railway")?3:0) + (knows(a,"automobile")?4:0);
+      if (d <= sp){ a.x = act.dest.x; a.y = act.dest.y; act.arrived = true; }
+      else { a.x += dx/d*sp; a.y += dy/d*sp; }
+    } else if (--act.left <= 0) finish(a);
+  }
+  // rockets
+  if (S.worldKnown.has("rocketry") && S.tick % 260 === 0){
+    const pads = S.agents.flatMap(a => a.buildings.filter(b => b.id === "pad" && !b.broken));
+    if (pads.length){ const p = pick(pads); S.rockets.push({x:p.x, y:p.y, vy:0, t:0, mars:S.worldKnown.has("mars_mission")}); }
+  }
+  if (S.tick % 2 === 0) UI.dirty = true;
+}
+
+/* ---------- particles ---------- */
+function burst(x, y, color, n){ for (let i=0;i<n;i++){ const an = rnd()*Math.PI*2, sp = 1 + rnd()*3; S.particles.push({x, y, vx:Math.cos(an)*sp, vy:Math.sin(an)*sp - 1, life:40 + rnd()*20, color, kind:"spark"}); } }
+function shards(x, y){ for (let i=0;i<14;i++){ const an = rnd()*Math.PI*2, sp = 1.5 + rnd()*3; S.particles.push({x, y, vx:Math.cos(an)*sp, vy:Math.sin(an)*sp, life:30, color:"#ff4d4d", kind:"shard"}); } }
+function puff(x, y){ for (let i=0;i<10;i++) S.particles.push({x:x + (rnd()-.5)*30, y, vx:(rnd()-.5)*.6, vy:-.5 - rnd(), life:45, color:"#bbbbbb", kind:"puff"}); }
+function hearts(x, y){ for (let i=0;i<6;i++) S.particles.push({x:x + (rnd()-.5)*30, y, vx:(rnd()-.5)*.5, vy:-.8, life:60, color:"#ff6b9a", kind:"heart"}); }
+
+/* ============================================================
+   Rendering: world canvas
+   ============================================================ */
+const cv = document.getElementById("world");
+let ctx = cv.getContext("2d");
+let terrain = null, terrainEra = -1, terrainKey = "", scale = 1, dpr = 1;
+function resize(){
+  const w = cv.parentElement.clientWidth;
+  const h = Math.round(w * (H / W));
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  cv.style.height = h + "px";
+  scale = (w / W) * dpr;
+  terrainEra = -1;
+}
+const ERA_LAND = [
+  {g1:"#7fae5a", g2:"#6c9d4b", road:null},
+  {g1:"#86b25c", g2:"#729f4e", road:"#b99a6b"},
+  {g1:"#88b05d", g2:"#749e4f", road:"#b99a6b"},
+  {g1:"#8caf60", g2:"#779d52", road:"#b3a48c"},
+  {g1:"#8aaa5f", g2:"#759752", road:"#a9a091"},
+  {g1:"#87a65f", g2:"#729352", road:"#9d978d"},
+  {g1:"#7d9660", g2:"#6a8352", road:"#6f6b66"},
+  {g1:"#7f9a64", g2:"#6c8756", road:"#55585c"},
+  {g1:"#7a9666", g2:"#678358", road:"#45494f"},
+];
+function drawTerrain(era){
+  const c = document.createElement("canvas"); c.width = cv.width; c.height = cv.height;
+  const g = c.getContext("2d"); g.scale(scale, scale);
+  const L = ERA_LAND[era];
+  const r2 = mulberry32(S.seed ^ 0x9e3779b9);
+  g.fillStyle = L.g1; g.fillRect(0, 0, W, H);
+  for (let i=0;i<260;i++){ g.fillStyle = L.g2; g.globalAlpha = .35; g.beginPath(); g.arc(r2()*W, r2()*H, 6 + r2()*22, 0, 7); g.fill(); }
+  g.globalAlpha = 1;
+  // river
+  g.strokeStyle = "#4f9bd1"; g.lineWidth = 34; g.lineCap = "round";
+  g.beginPath(); g.moveTo(760, -10); g.bezierCurveTo(900, 200, 720, 380, 860, 640); g.stroke();
+  g.strokeStyle = "#7cbbe6"; g.lineWidth = 10; g.globalAlpha = .6; g.stroke(); g.globalAlpha = 1;
+  // mountain
+  for (const [mx, my, s] of [[820,140,90],[900,120,110],[960,160,80],[760,120,60]]){
+    g.fillStyle = "#857a6c"; g.beginPath(); g.moveTo(mx - s*.7, my + s*.35); g.lineTo(mx, my - s*.6); g.lineTo(mx + s*.7, my + s*.35); g.fill();
+    g.fillStyle = "#f2f2ee"; g.beginPath(); g.moveTo(mx - s*.18, my - s*.33); g.lineTo(mx, my - s*.6); g.lineTo(mx + s*.18, my - s*.33); g.fill();
+  }
+  // forest
+  for (let i=0;i<60;i++){ const x = 60 + r2()*230, y = 40 + r2()*220; g.fillStyle = "#3f6f37"; g.beginPath(); g.arc(x, y, 9 + r2()*9, 0, 7); g.fill(); g.fillStyle = "#4f8544"; g.beginPath(); g.arc(x - 3, y - 3, 6 + r2()*5, 0, 7); g.fill(); }
+  // fields
+  if (S.worldKnown.has("agriculture")){
+    for (let k=0;k<3;k++){ const fx = 130 + k*80, fy = 430 + (k%2)*40; g.fillStyle = era >= 6 ? "#d9c26a" : "#c9b061"; g.fillRect(fx, fy, 70, 50); g.strokeStyle = "#a78f45"; g.lineWidth = 1.5; for (let r=0;r<6;r++){ g.beginPath(); g.moveTo(fx, fy + 4 + r*8); g.lineTo(fx + 70, fy + 4 + r*8); g.stroke(); } }
+  }
+  // roads
+  if (L.road && era >= 1){
+    g.strokeStyle = L.road; g.lineWidth = era >= 6 ? 9 : 6; g.lineCap = "round";
+    const hub = LOC.archive;
+    for (const p of [...HOMES, LOC.plaza, LOC.fields, LOC.forest, LOC.mountain]){ g.beginPath(); g.moveTo(hub.x, hub.y); g.quadraticCurveTo((hub.x+p.x)/2 + 20, (hub.y+p.y)/2 - 20, p.x, p.y); g.stroke(); }
+    if (era >= 6 && S.worldKnown.has("railway")){ g.strokeStyle = "#3b3b3b"; g.lineWidth = 2; g.setLineDash([6,5]); g.beginPath(); g.moveTo(0, 590); g.lineTo(W, 560); g.stroke(); g.setLineDash([]); }
+  }
+  // plaza
+  g.fillStyle = era >= 3 ? "#d8cfbd" : "#a98f63"; g.globalAlpha = .8; g.beginPath(); g.ellipse(LOC.plaza.x, LOC.plaza.y, 70, 34, 0, 0, 7); g.fill(); g.globalAlpha = 1;
+  // haze for industry
+  if (era >= 6){ g.fillStyle = "rgba(90,90,90,0.10)"; g.fillRect(0,0,W,H); }
+  return c;
+}
+
+const ARCHIVE_LOOK = ["Cave wall","Stone circle","Clay tablet hall","Library","Monastery library","University","Telegraph office","Radio station","Data center"];
+function drawArchive(g, era, t){
+  const {x, y} = LOC.archive;
+  g.save(); g.translate(x, y);
+  if (era === 0){ g.fillStyle = "#5b5249"; g.beginPath(); g.ellipse(0, 10, 60, 40, 0, Math.PI, 0); g.fill(); g.fillStyle = "#1f1b18"; g.beginPath(); g.ellipse(0, 10, 26, 22, 0, Math.PI, 0); g.fill(); g.fillStyle = "#c66b3d"; g.font = "bold 10px sans-serif"; g.fillText("✋ 🦌 ☀", -26, -14); }
+  else if (era <= 2){ g.fillStyle = "#b8a184"; for (let i=0;i<7;i++){ const an = i/7*Math.PI*2; g.fillRect(Math.cos(an)*40 - 5, Math.sin(an)*18 - 16, 10, 22); } g.fillStyle = "#8f7a5d"; g.fillRect(-14, -6, 28, 14); }
+  else if (era <= 4){ g.fillStyle = "#e3dccd"; g.fillRect(-50, -20, 100, 34); g.fillStyle = "#c9bfa8"; g.beginPath(); g.moveTo(-58, -20); g.lineTo(0, -46); g.lineTo(58, -20); g.fill(); g.fillStyle = "#b3a88f"; for (let i=0;i<5;i++) g.fillRect(-44 + i*22, -16, 6, 30); }
+  else if (era <= 6){ g.fillStyle = "#a8553a"; g.fillRect(-56, -30, 112, 46); g.fillStyle = "#7c3c27"; g.fillRect(-14, -52, 28, 22); g.fillStyle = "#ffe9a8"; for (let i=0;i<6;i++) g.fillRect(-48 + i*17, -20, 9, 12); }
+  else { g.fillStyle = "#2c3440"; g.fillRect(-60, -34, 120, 52); for (let i=0;i<10;i++){ g.fillStyle = (Math.floor(t/300) + i) % 3 ? "#57e389" : "#1d6b45"; g.fillRect(-52 + i*11, -24, 6, 4); g.fillRect(-52 + i*11, -8, 6, 4); } if (era >= 7){ g.strokeStyle = "#9aa"; g.lineWidth = 2; g.beginPath(); g.moveTo(40, -34); g.lineTo(48, -70); g.lineTo(56, -34); g.stroke(); } }
+  g.restore();
+  label(g, `The Archive · ${ARCHIVE_LOOK[era]}`, x, y + 36, "#1d1d1d", "rgba(255,255,255,.75)");
+}
+function label(g, text, x, y, fg, bg, size=11){
+  g.font = `600 ${size}px "IBM Plex Sans", sans-serif`;
+  const w = g.measureText(text).width + 10;
+  g.fillStyle = bg; roundRect(g, x - w/2, y - size + 1, w, size + 6, 4); g.fill();
+  g.fillStyle = fg; g.textAlign = "center"; g.fillText(text, x, y + 3); g.textAlign = "left";
+}
+function roundRect(g, x, y, w, h, r){ g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); }
+function drawHome(g, a){
+  const {x, y} = a.home, k = a.known.size;
+  g.save(); g.translate(x, y);
+  if (!knows(a,"shelter")){ g.fillStyle = "#6b5a45"; g.beginPath(); g.moveTo(-16, 10); g.lineTo(0, -14); g.lineTo(16, 10); g.fill(); }
+  else if (!knows(a,"masonry")){ g.fillStyle = "#8b6f4e"; g.beginPath(); g.arc(0, 4, 17, Math.PI, 0); g.fill(); g.fillStyle = "#5a4630"; g.fillRect(-4, -4, 8, 8); }
+  else if (!knows(a,"steel")){ g.fillStyle = "#c8b89a"; g.fillRect(-16, -6, 32, 18); g.fillStyle = "#8a4b33"; g.beginPath(); g.moveTo(-20, -6); g.lineTo(0, -22); g.lineTo(20, -6); g.fill(); }
+  else { g.fillStyle = "#d9dde2"; g.fillRect(-16, -24, 32, 36); g.fillStyle = knows(a,"light_bulb") ? "#ffe27a" : "#8aa0b3"; for (let r=0;r<3;r++) for (let c=0;c<3;c++) g.fillRect(-12 + c*9, -20 + r*10, 6, 6); }
+  g.fillStyle = a.color; g.fillRect(-16, 13, 32, 3);
+  g.restore();
+}
+function drawBuilding(g, b, owner){
+  const def = BUILDINGS.find(x => x.id === b.id);
+  g.save(); g.globalAlpha = b.broken ? .45 : 1;
+  g.fillStyle = "rgba(255,255,255,.75)"; roundRect(g, b.x - 13, b.y - 13, 26, 26, 6); g.fill();
+  g.strokeStyle = owner.color; g.lineWidth = 2; g.stroke();
+  g.font = "15px serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(def.icon, b.x, b.y + 1);
+  if (b.broken){ g.globalAlpha = 1; g.strokeStyle = "#d33"; g.lineWidth = 3; g.beginPath(); g.moveTo(b.x - 10, b.y - 10); g.lineTo(b.x + 10, b.y + 10); g.moveTo(b.x + 10, b.y - 10); g.lineTo(b.x - 10, b.y + 10); g.stroke(); }
+  g.textAlign = "left"; g.textBaseline = "alphabetic"; g.restore();
+}
+function drawAgent(g, a, t, sel){
+  const x = a.dx, y = a.dy;
+  const moving = a.act && !a.act.arrived;
+  const bob = moving ? Math.sin(t/90 + a.i) * 2.2 : Math.sin(t/600 + a.i) * .8;
+  g.save(); g.translate(x, y + bob);
+  g.fillStyle = "rgba(0,0,0,.22)"; g.beginPath(); g.ellipse(0, 15 - bob, 11, 4, 0, 0, 7); g.fill();
+  if (sel){ g.strokeStyle = "#fff"; g.lineWidth = 3; g.beginPath(); g.arc(0, 2, 20, 0, 7); g.stroke(); g.strokeStyle = a.color; g.lineWidth = 1.5; g.stroke(); }
+  if (a.deep){ g.strokeStyle = "#ae8cff"; g.lineWidth = 2; g.setLineDash([4,4]); g.lineDashOffset = -t/40; g.beginPath(); g.arc(0, 2, 25, 0, 7); g.stroke(); g.setLineDash([]); }
+  g.fillStyle = a.color; roundRect(g, -9, -2, 18, 17, 7); g.fill();
+  g.fillStyle = "#f3d2b3"; g.beginPath(); g.arc(0, -8, 8, 0, 7); g.fill();
+  g.fillStyle = a.color; g.beginPath(); g.arc(0, -11, 8, Math.PI, 0); g.fill();
+  g.fillStyle = "#222"; g.fillRect(-3.5, -8, 2, 2.4); g.fillRect(1.5, -8, 2, 2.4);
+  if (moving){ g.strokeStyle = a.color; g.lineWidth = 3; g.beginPath(); g.moveTo(-4, 15); g.lineTo(-4 + Math.sin(t/90)*3, 21); g.moveTo(4, 15); g.lineTo(4 - Math.sin(t/90)*3, 21); g.stroke(); }
+  g.font = "13px serif"; g.fillText(a.mood, 8, -14);
+  g.restore();
+  label(g, a.name, x, y + 32, "#fff", a.color);
+}
+function drawBubble(g, a){
+  if (!a.bubble || a.bubbleT <= 0) return;
+  const alpha = a.bubbleT >= 999 ? 1 : clamp(a.bubbleT/20, 0, 1);
+  g.save(); g.globalAlpha = alpha;
+  g.font = `500 11px "IBM Plex Sans", sans-serif`;
+  const words = a.bubble.split(" "), lines = []; let cur = "";
+  for (const w of words){ const tst = cur ? cur + " " + w : w; if (g.measureText(tst).width > 150 && cur){ lines.push(cur); cur = w; } else cur = tst; }
+  if (cur) lines.push(cur);
+  const L = lines.slice(0, 3); if (lines.length > 3) L[2] += "…";
+  const w = Math.max(...L.map(l => g.measureText(l).width)) + 14, h = L.length*14 + 8;
+  let bx = clamp(a.dx - w/2, 4, W - w - 4), by = Math.max(4, a.dy - 32 - h);
+  g.fillStyle = "rgba(255,255,255,.95)"; g.strokeStyle = a.color; g.lineWidth = 1.5;
+  roundRect(g, bx, by, w, h, 8); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(a.dx - 5, by + h); g.lineTo(a.dx, by + h + 7); g.lineTo(a.dx + 5, by + h); g.fillStyle = "rgba(255,255,255,.95)"; g.fill();
+  g.fillStyle = "#1d1d1d"; L.forEach((l, i) => g.fillText(l, bx + 7, by + 15 + i*14));
+  g.restore();
+}
+function render(t){
+  if (!S) return;
+  const tk = S.era + ":" + S.worldKnown.size + ":" + cv.width; if (terrainEra === -1 || !terrain || tk !== terrainKey){ terrain = drawTerrain(S.era); terrainEra = S.era; terrainKey = tk; }
+  ctx.setTransform(1,0,0,1,0,0);
+  ctx.drawImage(terrain, 0, 0);
+  ctx.setTransform(scale,0,0,scale,0,0);
+  drawArchive(ctx, S.era, t);
+  label(ctx, "forest", LOC.forest.x, LOC.forest.y + 120, "#fff", "rgba(30,60,30,.6)", 10);
+  label(ctx, "mountain", LOC.mountain.x, LOC.mountain.y + 80, "#fff", "rgba(60,50,40,.6)", 10);
+  label(ctx, "river", LOC.river.x + 30, LOC.river.y + 40, "#fff", "rgba(30,70,110,.6)", 10);
+  for (const a of S.agents){ drawHome(ctx, a); for (const b of a.buildings) drawBuilding(ctx, b, a); }
+  // smooth positions
+  for (const a of S.agents){ a.dx += (a.x - a.dx) * 0.25; a.dy += (a.y - a.dy) * 0.25; }
+  // bonds
+  if (UI.bonds){
+    for (let i=0;i<5;i++) for (let j=i+1;j<5;j++){
+      const A = S.agents[i], B = S.agents[j], tv = (A.trust[j] + B.trust[i]) / 2;
+      if (Math.abs(tv) < 12) continue;
+      const al = clamp(Math.abs(tv)/100, .2, .75); ctx.strokeStyle = tv > 0 ? `rgba(47,170,95,${al})` : `rgba(220,50,45,${al})`;
+      ctx.lineWidth = 1 + Math.abs(tv)/22;
+      if (A.allies.has(j)) ctx.setLineDash([]); else if (tv < 0) ctx.setLineDash([6,5]); else ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(A.dx, A.dy); ctx.lineTo(B.dx, B.dy); ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+  // rockets
+  for (const r of S.rockets){ r.t++; r.vy -= 0.06; r.y += r.vy; ctx.font = "22px serif"; ctx.fillText("🚀", r.x - 10, r.y); for (let k=0;k<3;k++){ ctx.fillStyle = `rgba(255,${150+rnd()*90|0},60,.8)`; ctx.beginPath(); ctx.arc(r.x + (rnd()-.5)*6, r.y + 8 + k*7, 4 - k, 0, 7); ctx.fill(); } }
+  S.rockets = S.rockets.filter(r => r.y > -60);
+  const sorted = [...S.agents].sort((p, q) => p.dy - q.dy);
+  for (const a of sorted) drawAgent(ctx, a, t, a.i === UI.sel);
+  // particles
+  for (const p of S.particles){
+    p.x += p.vx; p.y += p.vy; p.vy += p.kind === "spark" ? .05 : p.kind === "shard" ? .12 : 0; p.life--;
+    ctx.globalAlpha = clamp(p.life/30, 0, 1);
+    if (p.kind === "heart"){ ctx.font = "12px serif"; ctx.fillText("❤", p.x, p.y); }
+    else { ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, p.kind === "puff" ? 6 : 2.2, 0, 7); ctx.fill(); }
+  }
+  ctx.globalAlpha = 1;
+  S.particles = S.particles.filter(p => p.life > 0);
+  if (UI.bubbles) for (const a of sorted) drawBubble(ctx, a);
+  if (UI.paused){ ctx.fillStyle = "rgba(0,0,0,.25)"; ctx.fillRect(0,0,W,H); label(ctx, "Paused", W/2, H/2, "#fff", "rgba(0,0,0,.6)", 16); }
+}
+
+/* ============================================================
+   Panels (DOM). Rebuilt a few times a second when state changed.
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtDay = t => "Day " + t.toLocaleString();
+
+function renderTop(){
+  $("eraName").textContent = ERAS[S.era];
+  $("dayLbl").textContent = fmtDay(S.tick);
+  $("eraTrack").innerHTML = ERAS.map((e, i) => `<span class="${i < S.era ? "on" : i === S.era ? "cur" : ""}" title="${e}"></span>`).join("");
+  $("knowLbl").textContent = `${S.worldKnown.size} of ${CORPUS.length} discoveries known`;
+  const nextEra = S.era + 1 < ERAS.length ? ERAS[S.era + 1] : null;
+  $("nextLbl").textContent = nextEra ? `next: ${nextEra}` : (S.worldKnown.has("mars_mission") ? "Mars reached" : "final age");
+}
+function renderRoster(){
+  $("roster").innerHTML = S.agents.map(a => `
+    <button class="ag-card" data-ag="${a.i}" aria-pressed="${a.i === UI.sel}">
+      <span class="nm"><span class="dot" style="background:${a.color}"></span>${esc(a.name)} <span aria-hidden="true">${a.mood}</span></span>
+      <span class="doing">${esc(a.act ? labelOf(a.act.o) : "deciding…")}</span>
+      <span class="kn mono">${a.known.size} known · 🍖${a.food} · 🪨${a.mats}</span>
+    </button>`).join("");
+}
+const TL_ICON = {discovery:"💡", social:"🤝", conflict:"⚔️", world:"🌍", claude:"🧠"};
+function renderTimeline(){
+  const ev = S.events.filter(e => UI.filter === "all" || e.type === UI.filter || (UI.filter === "discovery" && e.type === "world")).slice(-160).reverse();
+  $("tl").innerHTML = ev.length ? ev.map(e => `<button data-ag="${e.ai}"><span class="mono small">${fmtDay(e.t).replace("Day ","d")}</span><span>${e.ai >= 0 ? `<span class="dot" style="background:${S.agents[e.ai].color}"></span>` : ""}</span><span class="ty-${e.type}">${TL_ICON[e.type] || ""} ${esc(e.text)}</span></button>`).join("") : `<p class="empty">Nothing here yet.</p>`;
+}
+
+function needBar(name, v, invert){
+  const good = invert ? 100 - v : v;
+  const col = v > 70 ? "var(--bad)" : v > 45 ? "var(--warn)" : "var(--good)";
+  return `<div class="need"><div class="t"><span>${name}</span><span class="mono">${Math.round(v)}</span></div><div class="b"><i style="width:${v}%;background:${col}"></i></div></div>`;
+}
+function optionsHTML(tr){
+  const max = Math.max(1, ...tr.options.map(o => o.score));
+  return `<div class="opts">` + tr.options.map(o => {
+    const win = o === tr.chosen || (o.action === tr.chosen.action && o.target === tr.chosen.target);
+    return `<div class="opt ${win ? "win" : ""}"><div class="row"><span class="lab">${win ? "▶ " : ""}${esc(labelOf(o))}</span><span class="mono" style="text-align:right">${o.score}</span><span class="bar"><i style="width:${o.score/max*100}%"></i></span></div>
+      <div class="why">${o.reasons.map(r => `<span class="${r[1] >= 0 ? "p" : "n"}">${r[1] >= 0 ? "+" : ""}${r[1]} ${esc(r[0])}</span>`).join("")}</div></div>`;
+  }).join("") + `</div>`;
+}
+function traceHTML(a, tr, live){
+  if (tr.src === "claude"){
+    return `<div class="now claude">
+      <div class="stage-row"><span class="stage-lbl">Source</span><span><span class="badge">🧠 ${esc(tr.modelLabel)}</span> ${tr.substituted ? `<span class="badge warn">ran on ${esc(tr.modelApplied)}</span>` : ""}</span></div>
+      <div class="stage-row"><span class="stage-lbl">Reasoning</span><ol class="steps">${tr.steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol></div>
+      <div class="stage-row"><span class="stage-lbl">Thought</span><span class="out">"${esc(tr.thought)}"</span></div>
+      <div class="stage-row"><span class="stage-lbl">Feeling</span><span class="out">${esc(tr.feeling)}</span></div>
+      <div class="stage-row"><span class="stage-lbl">New goal</span><span class="out">${esc(tr.goalText)}</span></div>
+      ${tr.invention ? `<div class="stage-row"><span class="stage-lbl">Invented</span><span class="out"><b>${esc(tr.invention)}</b></span></div>` : ""}
+    </div>`;
+  }
+  return `<div class="now">
+    <div class="stage-row"><span class="stage-lbl">1 · Perceive</span><div class="needs">${needBar("Hunger", tr.needs.hunger)}${needBar("Fatigue", tr.needs.fatigue)}${needBar("Loneliness", tr.needs.loneliness)}<div class="need mono" style="align-self:end">🍖 ${tr.needs.food} food · 🪨 ${tr.needs.mats} mat.</div></div></div>
+    <div class="stage-row"><span class="stage-lbl">2 · Weigh</span>${optionsHTML(tr)}</div>
+    <div class="stage-row"><span class="stage-lbl">3 · Decide</span><span class="out"><b>${esc(tr.label)}</b></span></div>
+    <div class="stage-row"><span class="stage-lbl">4 · Outcome</span><span class="out">${esc(tr.outcome)}</span></div>
+    ${tr.learned ? `<div class="stage-row"><span class="stage-lbl">5 · Learned</span><span class="out">${esc(tr.learned)}</span></div>` : ""}
+  </div>`;
+}
+
+function radarSVG(a){
+  const cx = 90, cy = 82, R = 62;
+  const pts = TRAITS.map((t, i) => { const an = -Math.PI/2 + i/5*Math.PI*2; return [cx + Math.cos(an)*R*a.tr[t], cy + Math.sin(an)*R*a.tr[t], an]; });
+  let s = `<svg width="190" height="170" viewBox="0 0 190 170" role="img" aria-label="Personality radar">`;
+  for (const k of [.33, .66, 1]) s += `<polygon points="${TRAITS.map((_, i) => { const an = -Math.PI/2 + i/5*Math.PI*2; return (cx + Math.cos(an)*R*k) + "," + (cy + Math.sin(an)*R*k); }).join(" ")}" fill="none" stroke="var(--line)"/>`;
+  s += `<polygon points="${pts.map(p => p[0] + "," + p[1]).join(" ")}" fill="${a.color}" fill-opacity=".3" stroke="${a.color}" stroke-width="2"/>`;
+  TRAITS.forEach((t, i) => { const an = pts[i][2]; const lx = cx + Math.cos(an)*(R + 14), ly = cy + Math.sin(an)*(R + 12); s += `<text x="${lx}" y="${ly + 3}" font-size="9.5" text-anchor="middle" fill="var(--muted)">${t}</text>`; });
+  return s + `</svg>`;
+}
+function mindMapSVG(a, all){
+  const ids = all ? CORPUS.map(d => d.id) : CORPUS.filter(d => a.known.has(d.id) || (d.pre.every(p => a.known.has(p))) || a.wish.includes(d.id)).map(d => d.id);
+  const cols = {}; ids.forEach(id => { const e = BY[id].era; (cols[e] = cols[e] || []).push(id); });
+  const colW = all ? 118 : 104, rowH = 21, top = 26;
+  const maxRows = Math.max(1, ...Object.values(cols).map(c => c.length));
+  const usedEras = Object.keys(cols).map(Number).sort((x,y)=>x-y);
+  const width = usedEras.length * colW + 10, height = top + maxRows*rowH + 10;
+  const pos = {};
+  usedEras.forEach((e, ci) => cols[e].forEach((id, ri) => pos[id] = {x:8 + ci*colW, y:top + ri*rowH}));
+  let s = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="Knowledge map">`;
+  usedEras.forEach((e, ci) => s += `<text x="${8 + ci*colW}" y="14" font-size="10" font-weight="600" fill="var(--muted)">${ERAS[e].toUpperCase()}</text>`);
+  for (const id of ids){ for (const p of BY[id].pre){ if (!pos[p]) continue; const A = pos[p], B = pos[id];
+    const on = all ? S.worldKnown.has(id) : a.known.has(id);
+    s += `<path d="M${A.x + colW - 16} ${A.y + 7} C ${A.x + colW} ${A.y + 7}, ${B.x - 10} ${B.y + 7}, ${B.x} ${B.y + 7}" fill="none" stroke="${on ? "var(--muted)" : "var(--line)"}" stroke-width="${on ? 1 : .8}" opacity=".7"/>`; } }
+  for (const id of ids){
+    const d = BY[id], p = pos[id];
+    let fill, stroke, dash = "", txt = "var(--ink)", opacity = 1;
+    if (all){
+      const f = S.firstBy[id];
+      if (S.worldKnown.has(id)){ const col = f >= 0 ? S.agents[f].color : "#888"; fill = col; stroke = col; txt = "#fff"; }
+      else { fill = "var(--panel)"; stroke = "var(--line)"; txt = "var(--muted)"; opacity = .8; }
+    } else {
+      const k = a.known.has(id), fresh = k && S.tick - (a.learnedAt[id] || 0) < 300;
+      if (k){ fill = fresh ? "var(--accent)" : a.color; stroke = fill; txt = "#fff"; }
+      else if (a.wish.includes(id)){ fill = "var(--panel)"; stroke = "var(--warn)"; dash = `stroke-dasharray="3 2"`; }
+      else { fill = "var(--panel)"; stroke = "var(--muted)"; dash = `stroke-dasharray="3 2"`; txt = "var(--muted)"; }
+    }
+    const name = d.name.length > 16 ? d.name.slice(0, 15) + "…" : d.name;
+    s += `<g opacity="${opacity}"><title>${esc(d.name)}: ${esc(d.blurb)}${d.pre.length ? " (needs " + esc(d.pre.map(x=>BY[x].name).join(", ")) + ")" : ""}</title><rect x="${p.x}" y="${p.y}" width="${colW - 16}" height="15" rx="4" fill="${fill}" stroke="${stroke}" ${dash}/><text x="${p.x + 5}" y="${p.y + 11}" font-size="9.5" fill="${txt}">${esc(name)}${d.custom ? " ✦" : ""}</text></g>`;
+  }
+  return s + `</svg>`;
+}
+
+function renderMind(){
+  const a = S.agents[UI.sel];
+  const tr = UI.histSel != null ? a.thoughts.find(x => x.t === UI.histSel.t && x.src === UI.histSel.src) || a.thoughts[a.thoughts.length-1] : a.thoughts[a.thoughts.length-1];
+  const claudeOn = CLAUDE.on && CLAUDE.sample;
+  let h = `<div class="who"><div class="avatar" style="background:${a.color}22;border:2px solid ${a.color}">${a.mood}</div><div><h2>${esc(a.name)}</h2><div class="small">${esc(a.role)} · ${a.known.size} discoveries · invented ${a.stats.invented}</div>
+    <div class="traits">${a.goal ? `<span class="pill" style="border-color:var(--claude);color:var(--claude)">goal: ${esc(a.goal.text)}</span>` : ""}${a.wish.slice(0,3).map(w => `<span class="pill">wants: ${esc(BY[w]?.name || w)}</span>`).join("")}${[...a.allies].map(j => `<span class="pill" style="border-color:var(--good)">ally: ${esc(S.agents[j].name)}</span>`).join("")}</div></div></div>`;
+  if (claudeOn) h += `<div class="deep"><button class="btn-claude" id="deepBtn" ${a.deep ? "disabled" : ""}>${a.deep ? "Thinking deeply…" : `🧠 Deep think as ${esc(a.name)}`}</button>${a.deep ? `<button class="btn" id="stopDeep">Stop</button>` : ""}<span class="small">${CLAUDE.model === "claude-opus-5-5" ? "Opus" : "Sonnet"} · medium · may invent something new</span></div>`;
+  if (a.deepErr) h += `<p class="small" style="color:var(--bad)">${esc(a.deepErr)}</p>`;
+  h += `<section class="sec"><h3>${UI.histSel ? "Past thought · " + fmtDay(tr.t) : "Thinking right now"}${UI.histSel ? `<button class="btn" id="liveBtn">Back to live</button>` : ""}</h3>${tr ? traceHTML(a, tr) : `<p class="empty">No thoughts yet.</p>`}</section>`;
+  h += `<section class="sec"><h3>Thought history</h3><div class="hist">${a.thoughts.slice(-24).reverse().map(t => `<button data-th="${t.t}" data-src="${t.src}" aria-pressed="${UI.histSel && UI.histSel.t === t.t && UI.histSel.src === t.src}"><span class="mono tk">${fmtDay(t.t).replace("Day ","d")}</span><span>${t.src === "claude" ? "🧠" : "·"}</span><span class="${t.src === "claude" ? "src-claude" : ""}">${esc(t.src === "claude" ? t.thought : t.label + " → " + t.outcome)}</span></button>`).join("")}</div></section>`;
+  h += `<section class="sec"><h3>Mind map <span class="small" style="text-transform:none;letter-spacing:0">filled = known · orange = new · dashed = within reach · yellow = wants</span></h3><div class="svgwrap">${mindMapSVG(a, false)}</div></section>`;
+  h += `<section class="sec"><h3>Personality & body</h3><div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">${radarSVG(a)}<div class="needs" style="flex:1;min-width:160px;grid-template-columns:1fr">${needBar("Hunger", a.needs.hunger)}${needBar("Fatigue", a.needs.fatigue)}${needBar("Loneliness", a.needs.loneliness)}<div class="small mono">🍖 ${a.food} food · 🪨 ${a.mats} materials · 🏠 ${a.buildings.length} buildings</div></div></div></section>`;
+  h += `<section class="sec"><h3>How ${esc(a.name)} feels about others</h3><div class="rel">${S.agents.filter(b => b !== a).map(b => { const v = a.trust[b.i]; const w = Math.abs(v)/2; return `<div class="rel-row"><span><span class="dot" style="background:${b.color}"></span> ${esc(b.name)}</span><span class="div-bar"><i style="${v >= 0 ? `left:50%;width:${w}%;background:var(--good)` : `right:50%;width:${w}%;background:var(--bad)`}"></i></span><span class="mono" style="text-align:right">${v > 0 ? "+" : ""}${v}</span></div>`; }).join("")}</div>
+    <div class="grudges">${a.grudges.filter(g => g.sev > 0.5).map(g => `<div class="grudge">Grudge against <b>${esc(S.agents[g.against].name)}</b>: ${esc(g.reason)} <span class="mono small">(${Math.round(g.sev)})</span></div>`).join("") || `<span class="small">No grudges.</span>`}</div></section>`;
+  h += `<section class="sec"><h3>Memories</h3><div class="mem">${a.mem.slice(-60).reverse().map(m => `<div><span class="mono small">${fmtDay(m.t).replace("Day ","d")}</span><span>${esc(m.text)}</span></div>`).join("")}</div></section>`;
+  return h;
+}
+function renderTech(){
+  const custom = CORPUS.filter(d => d.custom);
+  return `<section class="sec"><h3>Civilization tech tree</h3><p class="small" style="margin:0 0 8px">Each box is colored by who discovered it first. Hover for the article. ✦ marks inventions dreamed up through Ask Claude.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:8px">${S.agents.map(a => `<span class="small"><span class="dot" style="background:${a.color}"></span> ${esc(a.name)} (${Object.values(S.firstBy).filter(v => v === a.i).length})</span>`).join("")}</div>
+    <div class="svgwrap">${mindMapSVG(S.agents[0], true)}</div></section>
+    ${custom.length ? `<section class="sec"><h3>Original inventions</h3>${custom.map(d => `<p style="margin:0 0 6px"><b>${esc(d.name)}</b> <span class="small">by ${esc(S.agents[S.firstBy[d.id]]?.name || "?")}, builds on ${esc(d.pre.map(p=>BY[p].name).join(", "))}</span><br>${esc(d.blurb)}</p>`).join("")}</section>` : ""}`;
+}
+function renderSociety(){
+  const c = S.counts;
+  let m = `<table class="matrix"><tr><th></th>${S.agents.map(b => `<th style="color:${b.color}">${esc(b.name)}</th>`).join("")}</tr>`;
+  for (const a of S.agents){
+    m += `<tr><th style="color:${a.color};text-align:right;padding-right:6px">${esc(a.name)}</th>`;
+    for (const b of S.agents){
+      if (a === b){ m += `<td style="background:var(--panel-2)">·</td>`; continue; }
+      const v = a.trust[b.i], al = clamp(Math.abs(v)/100, .08, .85);
+      m += `<td title="${esc(a.name)} → ${esc(b.name)}: ${v}" style="background:${v >= 0 ? `rgba(47,170,95,${al})` : `rgba(220,50,45,${al})`}" class="mono">${v}${a.allies.has(b.i) ? "🤝" : ""}</td>`;
+    }
+    m += `</tr>`;
+  }
+  m += `</table>`;
+  const feuds = [];
+  for (const a of S.agents) for (const g of a.grudges) if (g.sev > 10) feuds.push(`<div class="grudge"><b>${esc(a.name)}</b> vs <b>${esc(S.agents[g.against].name)}</b>: ${esc(g.reason)} <span class="mono small">(${Math.round(g.sev)})</span></div>`);
+  return `<section class="sec"><h3>Society at a glance</h3><div class="stats">
+    <div class="stat"><b class="mono">${c.taught}</b><span>lessons taught</span></div>
+    <div class="stat"><b class="mono">${c.alliances}</b><span>alliances</span></div>
+    <div class="stat"><b class="mono">${c.gifts}</b><span>trades</span></div>
+    <div class="stat"><b class="mono">${c.thefts}</b><span>thefts (${c.caught} caught)</span></div>
+    <div class="stat"><b class="mono">${c.revenge}</b><span>acts of revenge</span></div>
+    <div class="stat"><b class="mono">${c.apologies}</b><span>apologies</span></div></div>
+    <p class="small" style="margin:8px 0 0">${S.lawKnown ? "⚖️ Written law exists: caught thieves are fined and everyone trusts them less." : "No laws yet. Theft goes unpunished except by revenge."}</p></section>
+    <section class="sec"><h3>Trust matrix (row feels about column)</h3><div class="svgwrap" style="padding:6px">${m}</div></section>
+    <section class="sec"><h3>Open feuds</h3><div class="grudges">${feuds.join("") || `<span class="small">Peace, for now.</span>`}</div></section>`;
+}
+function renderArchive(){
+  return `<section class="sec"><h3>The Archive</h3><p class="small" style="margin:0 0 8px">The Archive is the agents' offline web. It holds an article for every discovery from fire to Mars, but an agent can only understand an article once they know the ideas it builds on. Here is what they searched for recently.</p>
+    <div class="search-log">${S.searches.slice(-40).reverse().map(e => { const a = S.agents[e.ai]; return `<div class="q"><span class="dot" style="background:${a.color}"></span> <b>${esc(a.name)}</b> <span class="mono small">${fmtDay(e.t)}</span><div>🔍 "${esc(e.q)}?"</div><div class="res" style="color:${e.ok ? "var(--good)" : e.res === "too advanced" ? "var(--bad)" : "var(--warn)"}">→ ${esc(BY[e.id]?.name || e.id)}: ${esc(e.res)}${e.miss.length ? ` (missing ${esc(e.miss.map(m => BY[m].name).join(", "))})` : ""}</div></div>`; }).join("") || `<p class="empty">No searches yet.</p>`}</div></section>`;
+}
+let lastPanel = 0;
+function renderPanels(force){
+  const now = performance.now();
+  if (!force && (!UI.dirty || now - lastPanel < 280)) return;
+  lastPanel = now; UI.dirty = false;
+  renderTop(); renderRoster(); renderTimeline();
+  const body = $("tabbody");
+  const keep = body.scrollTop;
+  body.innerHTML = UI.tab === "mind" ? renderMind() : UI.tab === "tech" ? renderTech() : UI.tab === "society" ? renderSociety() : renderArchive();
+  body.scrollTop = keep;
+}
+
+/* ============================================================
+   Ask Claude (optional, off by default, only on a button click)
+   ============================================================ */
+const CLAUDE = {sample:null, on:false, model:"claude-sonnet-5-5"};
+async function initClaude(){
+  let s = null;
+  try { s = window.claude && typeof window.claude.use === "function" ? await window.claude.use("sample") : null; } catch { s = null; }
+  if (!S) return;
+  CLAUDE.sample = s;
+  if (s){ $("claudeSwitch").disabled = false; $("claudeState").textContent = "off"; }
+  else { $("claudeState").textContent = "not available here"; }
+}
+async function deepThink(a){
+  if (!CLAUDE.sample || a.deep) return;
+  a.deep = true; a.deepErr = null; UI.dirty = true; say(a, "🧠 thinking very deeply…", 999);
+  const ctl = new AbortController(); TIMERS.aborts.add(ctl); a.deepCtl = ctl;
+  const known = [...a.known];
+  const reach = reachable(a).map(d => d.name);
+  const prompt = `You are the private inner voice of ${a.name}, one of five people in a civilization simulation that started in the Stone Age.
+Personality (0 to 1): ${TRAITS.map(t => t + " " + a.tr[t].toFixed(2)).join(", ")}.
+Current era of the society: ${ERAS[S.era]}. Day ${S.tick}.
+Needs (0 good, 100 bad): hunger ${Math.round(a.needs.hunger)}, fatigue ${Math.round(a.needs.fatigue)}, loneliness ${Math.round(a.needs.loneliness)}. Food ${a.food}, materials ${a.mats}.
+Known discoveries (ids): ${known.join(", ")}.
+Discoveries now within reach: ${reach.join(", ") || "none"}.
+Feelings about others (trust -100..100): ${S.agents.filter(b => b !== a).map(b => b.name + " " + a.trust[b.i]).join(", ")}.
+Grudges: ${a.grudges.filter(g => g.sev > 1).map(g => S.agents[g.against].name + ": " + g.reason).join("; ") || "none"}.
+Recent memories: ${a.mem.slice(-8).map(m => m.text).join(" | ")}.
+
+Think as ${a.name} would, using only what they know. You may imagine ONE original invention that could plausibly be built from 2 or 3 of the known discovery ids (it must not be one of the standard discoveries above). Keep conflict non-graphic (theft, sabotage, rumours, forgiveness).
+Reply with ONLY a JSON object, no other text:
+{"steps":["3 to 5 short reasoning steps in first person"],"thought":"one sentence inner monologue","feeling":"one or two words","goal":"one of: search, think, build, teach, chat, trade, steal, revenge, apologize, ally, gather_food, gather_mat, rest","goal_target":"a name from ${S.agents.filter(b=>b!==a).map(b=>b.name).join("/")} or null","invention":null or {"name":"short name","blurb":"one sentence on what it does","builds_on":["2-3 ids from the known list"]}}`;
+  try {
+    const res = await CLAUDE.sample(prompt, {model:CLAUDE.model, effort:"medium", modelTier:"default", signal:ctl.signal, cache:false});
+    if (!S || !S.agents.includes(a)) return;
+    const m = res.text.match(/\{[\s\S]*\}/);
+    if (!m) throw {code:"parse", message:"Claude's answer wasn't readable."};
+    const j = JSON.parse(m[0]);
+    const label = CLAUDE.model === "claude-opus-5-5" ? "Opus · medium" : "Sonnet · medium";
+    const applied = res.modelApplied || null;
+    const trace = {t:S.tick, src:"claude", modelLabel:label, modelApplied:applied, substituted: !!(applied && !applied.startsWith(CLAUDE.model)),
+      steps:(Array.isArray(j.steps) ? j.steps : []).slice(0, 6).map(String), thought:String(j.thought || "…"), feeling:String(j.feeling || "?"), goalText:"", invention:null};
+    const valid = ["search","think","build","teach","chat","trade","steal","revenge","apologize","ally","gather_food","gather_mat","rest"];
+    if (valid.includes(j.goal)){
+      const tgt = S.agents.find(b => b !== a && j.goal_target && b.name.toLowerCase() === String(j.goal_target).toLowerCase());
+      a.goal = {action:j.goal, target:tgt ? tgt.i : null, until:S.tick + 160, text:(ACTION_LABEL[j.goal] || j.goal) + (tgt ? " " + tgt.name : "")};
+      trace.goalText = a.goal.text + " (boosted for the next 160 days)";
+    } else trace.goalText = "none";
+    if (j.invention && j.invention.name && Array.isArray(j.invention.builds_on)){
+      const pre = j.invention.builds_on.filter(id => a.known.has(id)).slice(0, 3);
+      const name = String(j.invention.name).slice(0, 40);
+      if (pre.length >= 1 && !CORPUS.some(d => d.name.toLowerCase() === name.toLowerCase())){
+        const id = "custom_" + (++S.customCount);
+        const era = Math.max(...pre.map(p => BY[p].era));
+        const d = {id, name, era, pre, q:"what " + name + " is", blurb:String(j.invention.blurb || "").slice(0, 200), custom:true};
+        CORPUS.push(d); BY[id] = d;
+        learn(a, id, "claude"); a.stats.invented++;
+        trace.invention = `${name}: ${d.blurb}`;
+        log("claude", a.i, `✦ ${a.name} imagined an original invention: ${name}.`);
+        remember(a, `I imagined something new: ${name}.`, "invent");
+      }
+    }
+    a.thoughts.push(trace); if (a.thoughts.length > 60) a.thoughts.shift();
+    a.mood = "🤩";
+    say(a, "🧠 " + trace.thought, 120);
+    log("claude", a.i, `🧠 ${a.name} reflected: "${trace.thought}"`);
+    remember(a, `Deep thought: ${trace.thought}`, "claude");
+    UI.histSel = null;
+  } catch (e){
+    if (!S) return;
+    const code = e && e.code;
+    a.deepErr = code === "cancelled" ? null : code === "not_granted" ? "Claude access was declined for this page." : code === "rate_limited" ? "Too many requests. Wait a minute, then try again." : (e && e.message) || "Claude couldn't answer.";
+    if (code === "not_granted"){ CLAUDE.on = false; syncClaudeUI(); }
+    say(a, "🤔 …", 30);
+  } finally {
+    TIMERS.aborts.delete(ctl);
+    if (S && S.agents.includes(a)){ a.deep = false; a.deepCtl = null; UI.dirty = true; }
+  }
+}
+function syncClaudeUI(){
+  $("claudeSwitch").setAttribute("aria-checked", String(CLAUDE.on));
+  $("modelSel").disabled = !CLAUDE.on;
+  if (CLAUDE.sample) $("claudeState").textContent = CLAUDE.on ? "on · uses your Claude usage" : "off";
+  UI.dirty = true;
+}
+
+/* ============================================================
+   WIPE: destroy everything
+   ============================================================ */
+function scrub(obj, depth=0){
+  if (!obj || typeof obj !== "object" || depth > 6) return;
+  if (obj instanceof Set || obj instanceof Map){ obj.clear(); return; }
+  if (Array.isArray(obj)){ for (let i=0;i<obj.length;i++){ scrub(obj[i], depth+1); obj[i] = 0; } obj.length = 0; return; }
+  for (const k of Object.keys(obj)){ scrub(obj[k], depth+1); obj[k] = null; delete obj[k]; }
+}
+async function annihilate(){
+  // 1. stop all activity
+  running = false;
+  TIMERS.raf.forEach(id => cancelAnimationFrame(id)); TIMERS.raf.clear();
+  TIMERS.to.forEach(id => clearTimeout(id)); TIMERS.to.clear();
+  TIMERS.iv.forEach(id => clearInterval(id)); TIMERS.iv.clear();
+  TIMERS.aborts.forEach(c => { try { c.abort(); } catch {} }); TIMERS.aborts.clear();
+  CLAUDE.on = false;
+  // 2. overwrite and drop every piece of state
+  if (S){ scrub(S); }
+  S = null;
+  CORPUS.length = 0; for (const k of Object.keys(BY)) delete BY[k];
+  terrain = null; UI.histSel = null;
+  // 3. scrub the screen
+  ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0, 0, cv.width, cv.height); cv.width = 0; cv.height = 0;
+  for (const id of ["tabbody","tl","roster","eraTrack"]) $(id).replaceChildren();
+  for (const id of ["eraName","dayLbl","knowLbl","nextLbl"]) $(id).textContent = "";
+  try { console.clear(); } catch {}
+  // 4. defensive sweep of every browser store (this page never writes to any of them)
+  try { window.localStorage && window.localStorage.clear(); } catch {}
+  try { window.sessionStorage && window.sessionStorage.clear(); } catch {}
+  try { if (indexedDB && indexedDB.databases){ const dbs = await indexedDB.databases(); dbs.forEach(d => d.name && indexedDB.deleteDatabase(d.name)); } } catch {}
+  try { if (window.caches){ const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); } } catch {}
+  try { document.cookie.split(";").forEach(c => { const n = c.split("=")[0].trim(); if (n) document.cookie = n + "=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/"; }); } catch {}
+  // 5. confirmation flash, then throw away the whole JS heap with a page replace
+  const f = document.createElement("div"); f.className = "flash"; f.innerHTML = `<div>Memory annihilated<small>A new Stone Age begins.</small></div>`;
+  document.body.appendChild(f);
+  setTimeout(() => {
+    let reloaded = false;
+    try { location.replace(location.href); reloaded = true; } catch {}
+    // If the frame refuses navigation, rebuild a fresh world in place.
+    setTimeout(() => { f.remove(); boot(); }, reloaded ? 1500 : 0);
+  }, 700);
+}
+
+/* ---------- wipe controls: hold 2s, or Shift+Esc instantly ---------- */
+let holdStart = 0, holdRaf = 0;
+function holdTick(){
+  const p = clamp((performance.now() - holdStart) / 2000, 0, 1);
+  $("wipeFill").style.transform = `scaleX(${p})`;
+  if (p >= 1){ holdStart = 0; $("wipeFill").style.transform = "scaleX(0)"; annihilate(); return; }
+  if (holdStart) holdRaf = requestAnimationFrame(holdTick);
+}
+function holdBegin(e){ if (e) e.preventDefault(); if (holdStart || !S) return; holdStart = performance.now(); holdRaf = requestAnimationFrame(holdTick); }
+function holdEnd(){ holdStart = 0; cancelAnimationFrame(holdRaf); $("wipeFill").style.transform = "scaleX(0)"; }
+$("wipeBtn").addEventListener("pointerdown", holdBegin);
+["pointerup","pointerleave","pointercancel"].forEach(ev => $("wipeBtn").addEventListener(ev, holdEnd));
+$("wipeBtn").addEventListener("keydown", e => { if ((e.key === "Enter" || e.key === " ") && !e.repeat) holdBegin(e); });
+$("wipeBtn").addEventListener("keyup", e => { if (e.key === "Enter" || e.key === " ") holdEnd(); });
+$("wipeBtn").addEventListener("contextmenu", e => e.preventDefault());
+$("wipeInfo").addEventListener("click", () => { const n = $("wipeNote"); n.hidden = !n.hidden; $("wipeInfo").setAttribute("aria-expanded", String(!n.hidden)); });
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && e.shiftKey && S){ e.preventDefault(); annihilate(); return; }
+  if (e.key === " " && e.target === document.body){ e.preventDefault(); togglePause(); }
+});
+
+/* ---------- other controls ---------- */
+function togglePause(){ UI.paused = !UI.paused; $("pauseBtn").setAttribute("aria-pressed", String(UI.paused)); $("pauseBtn").textContent = UI.paused ? "▶" : "⏸"; }
+$("pauseBtn").addEventListener("click", togglePause);
+document.querySelectorAll("[data-speed]").forEach(b => b.addEventListener("click", () => {
+  UI.speed = +b.dataset.speed; document.querySelectorAll("[data-speed]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
+  if (UI.paused) togglePause();
+}));
+$("claudeSwitch").addEventListener("click", () => { if (!CLAUDE.sample) return; CLAUDE.on = !CLAUDE.on; syncClaudeUI(); });
+$("modelSel").addEventListener("change", e => { CLAUDE.model = e.target.value; UI.dirty = true; });
+$("bondsBtn").addEventListener("click", e => { UI.bonds = !UI.bonds; e.currentTarget.setAttribute("aria-pressed", String(UI.bonds)); });
+$("bubblesBtn").addEventListener("click", e => { UI.bubbles = !UI.bubbles; e.currentTarget.setAttribute("aria-pressed", String(UI.bubbles)); });
+document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => {
+  UI.tab = b.dataset.tab; document.querySelectorAll("[data-tab]").forEach(x => x.setAttribute("aria-selected", String(x === b)));
+  $("tabbody").scrollTop = 0; renderPanels(true);
+}));
+$("filters").addEventListener("click", e => { const b = e.target.closest("[data-f]"); if (!b) return; UI.filter = b.dataset.f; document.querySelectorAll("[data-f]").forEach(x => x.setAttribute("aria-pressed", String(x === b))); renderPanels(true); });
+function selectAgent(i){ if (i < 0 || !S) return; UI.sel = i; UI.histSel = null; UI.tab = "mind"; document.querySelectorAll("[data-tab]").forEach(x => x.setAttribute("aria-selected", String(x.dataset.tab === "mind"))); $("tabbody").scrollTop = 0; renderPanels(true); }
+$("roster").addEventListener("click", e => { const b = e.target.closest("[data-ag]"); if (b) selectAgent(+b.dataset.ag); });
+$("tl").addEventListener("click", e => { const b = e.target.closest("[data-ag]"); if (b) selectAgent(+b.dataset.ag); });
+$("tabbody").addEventListener("click", e => {
+  if (!S) return;
+  const th = e.target.closest("[data-th]");
+  if (th){ UI.histSel = {t:+th.dataset.th, src:th.dataset.src}; renderPanels(true); return; }
+  if (e.target.closest("#liveBtn")){ UI.histSel = null; renderPanels(true); return; }
+  if (e.target.closest("#deepBtn")){ deepThink(S.agents[UI.sel]); renderPanels(true); return; }
+  if (e.target.closest("#stopDeep")){ const a = S.agents[UI.sel]; a.deepCtl && a.deepCtl.abort(); return; }
+});
+cv.addEventListener("click", e => {
+  if (!S) return;
+  const r = cv.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width * W, y = (e.clientY - r.top) / r.height * H;
+  let best = -1, bd = 40;
+  for (const a of S.agents){ const d = Math.hypot(a.dx - x, a.dy - y); if (d < bd){ bd = d; best = a.i; } }
+  selectAgent(best);
+});
+let bannerTO = 0;
+function banner(text){ const b = $("banner"); b.textContent = text; b.hidden = false; clearTimeout(bannerTO); TIMERS.to.delete(bannerTO); bannerTO = later(() => { b.hidden = true; }, 4500); }
+
+/* ---------- main loop ---------- */
+let running = false, acc = 0, lastT = 0;
+const TICKS_PER_SEC = 10;
+function loop(t){
+  if (!running || !S) return;
+  const dt = Math.min(100, t - (lastT || t)); lastT = t;
+  if (!UI.paused){
+    acc += dt / 1000 * TICKS_PER_SEC * UI.speed;
+    let n = 0; while (acc >= 1 && n < 600){ step(); acc -= 1; n++; }
+    if (n >= 600) acc = 0;
+  }
+  render(t);
+  renderPanels(false);
+  raf(loop);
+}
+function boot(){
+  newWorld();
+  UI.sel = 0; UI.histSel = null; acc = 0; lastT = 0;
+  resize();
+  syncClaudeUI();
+  renderPanels(true);
+  running = true; raf(loop);
+  initClaude();
+}
+new ResizeObserver(() => { if (S) resize(); }).observe(cv.parentElement);
+window.__genesis = { get S(){ return S; }, step:n => { for (let i=0;i<n;i++) step(); }, annihilate };
+boot();
+</script>
