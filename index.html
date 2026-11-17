@@ -50,7 +50,7 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
 .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
 .btn{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:6px 12px;font-size:13px}
 .btn:hover{border-color:var(--muted)}
-.claude-box{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:4px 8px}
+.claude-box{display:flex;flex-wrap:wrap;align-items:center;gap:8px;border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:4px 8px}
 .switch{position:relative;width:34px;height:20px;border-radius:10px;background:var(--line);border:0;padding:0;flex:none}
 .switch::after{content:"";position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--panel);transition:left .15s}
 .switch[aria-checked="true"]{background:var(--claude)}
@@ -89,7 +89,7 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
 
 /* panel */
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;min-width:0;max-height:calc(100vh - 110px);position:sticky;top:12px}
-.tabs{display:flex;border-bottom:1px solid var(--line);overflow-x:auto}
+.tabs{flex:none;display:flex;border-bottom:1px solid var(--line);overflow-x:auto}
 .tabs button{border:0;background:none;padding:10px 14px;font-size:13px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
 .tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
 .tabbody{overflow:auto;padding:14px;display:flex;flex-direction:column;gap:16px;min-height:0}
@@ -210,7 +210,8 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
         <option value="claude-opus-5-5">Opus · medium</option>
       </select>
       <span class="small" id="claudeState">checking…</span>
-      <button class="btn-claude" id="councilBtn" hidden title="One request: all five agents reflect at once">🧠 Council: all five think</button>
+      <select id="thinkWho" aria-label="Who thinks" hidden><option value="sel">Selected agent</option><option value="all">Everyone</option></select>
+      <button class="btn-claude" id="autoBtn" hidden>🧠 Start thinking</button>
     </div>
     <div class="wipe-wrap">
       <button class="wipe" id="wipeBtn" aria-describedby="wipeHelp"><i class="fill" id="wipeFill"></i><span>☢ Hold to wipe everything</span></button>
@@ -1018,7 +1019,6 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":
 const fmtDay = t => "Day " + t.toLocaleString();
 
 function renderTop(){
-  const busy = S.agents.some(a => a.deep); const cb = $("councilBtn"); cb.disabled = busy; cb.textContent = busy ? "🧠 Thinking…" : "🧠 Council: all five think";
   $("eraName").textContent = ERAS[S.era];
   $("dayLbl").textContent = fmtDay(S.tick);
   $("eraTrack").innerHTML = ERAS.map((e, i) => `<span class="${i < S.era ? "on" : i === S.era ? "cur" : ""}" title="${e}"></span>`).join("");
@@ -1117,11 +1117,11 @@ function mindMapSVG(a, all){
 
 function renderMind(){
   const a = S.agents[UI.sel];
-  const tr = UI.histSel != null ? a.thoughts.find(x => x.t === UI.histSel.t && x.src === UI.histSel.src) || a.thoughts[a.thoughts.length-1] : a.thoughts[a.thoughts.length-1];
+  const tr = UI.histSel != null ? a.thoughts.find(x => x.t === UI.histSel.t && x.src === UI.histSel.src) || a.thoughts[a.thoughts.length-1] : ([...a.thoughts].reverse().find(x => x.src !== "claude") || a.thoughts[a.thoughts.length-1]);
   const claudeOn = CLAUDE.on && CLAUDE.sample;
   let h = `<div class="who"><div class="avatar" style="background:${a.color}22;border:2px solid ${a.color}">${a.mood}</div><div><h2>${esc(a.name)}</h2><div class="small">${esc(a.role)} · ${a.known.size} discoveries · invented ${a.stats.invented}</div>
     <div class="traits">${a.goal ? `<span class="pill" style="border-color:var(--claude);color:var(--claude)">goal: ${esc(a.goal.text)}</span>` : ""}${a.wish.slice(0,3).map(w => `<span class="pill">wants: ${esc(BY[w]?.name || w)}</span>`).join("")}${[...a.allies].map(j => `<span class="pill" style="border-color:var(--good)">ally: ${esc(S.agents[j].name)}</span>`).join("")}</div></div></div>`;
-  if (claudeOn) h += `<div class="deep"><button class="btn-claude" id="deepBtn" ${a.deep ? "disabled" : ""}>${a.deep ? "Thinking deeply…" : `🧠 Deep think as ${esc(a.name)}`}</button>${a.deep ? `<button class="btn" id="stopDeep">Stop</button>` : ""}<span class="small">${CLAUDE.model === "claude-opus-5-5" ? "Opus" : "Sonnet"} · medium · may invent something new</span></div>`;
+  if (claudeOn) h += `<div class="deep"><button class="btn-claude" id="deepBtn" ${a.deep || CLAUDE.run ? "disabled" : ""}>${a.deep ? `🧠 Auto-thinking${CLAUDE.run ? " · cycle " + (CLAUDE.run.cycle + 1) : "…"}` : `🧠 Auto-think as ${esc(a.name)}`}</button>${a.deep ? `<button class="btn" id="stopDeep">Stop</button>` : ""}<span class="small">${CLAUDE.model === "claude-opus-5-5" ? "Opus" : "Sonnet"} · medium · may invent something new</span></div>`;
   if (a.deepErr) h += `<div class="small" style="color:var(--bad);display:flex;flex-direction:column;gap:6px"><span>${esc(a.deepErr)} <span class="mono">(${esc(a.deepCode)})</span></span>${a.deepCode === "not_granted" ? `<span><button class="btn-claude" id="permBtn">Allow Claude for this page</button></span><span class="small" id="permHelp" style="color:var(--muted)">Opens this page's Permissions panel. Turn Claude on there, then click Deep think again.</span>` : ""}</div>`;
   if (a.lastClaude) h += `<section class="sec"><h3>🧠 Claude's latest reflection <span class="small mono" style="text-transform:none;letter-spacing:0">${fmtDay(a.lastClaude.t)}</span></h3>${traceHTML(a, a.lastClaude)}</section>`;
   h += `<section class="sec"><h3>${UI.histSel ? "Past thought · " + fmtDay(tr.t) : "Thinking right now"}${UI.histSel ? `<button class="btn" id="liveBtn">Back to live</button>` : ""}</h3>${tr ? traceHTML(a, tr) : `<p class="empty">No thoughts yet.</p>`}</section>`;
@@ -1185,7 +1185,7 @@ function renderPanels(force){
 /* ============================================================
    Ask Claude (optional, off by default, only on a button click)
    ============================================================ */
-const CLAUDE = {sample:null, on:false, model:"claude-sonnet-5-5"};
+const CLAUDE = {sample:null, on:false, model:"claude-sonnet-5-5", limits:null, run:null};
 let PERM;
 async function getPerm(){ if (PERM === undefined){ try { PERM = window.claude && typeof window.claude.use === "function" ? await window.claude.use("permissions") : null; } catch { PERM = null; } } return PERM; }
 async function openPermissions(){
@@ -1207,7 +1207,9 @@ async function initClaude(){
   try { s = window.claude && typeof window.claude.use === "function" ? await window.claude.use("sample") : null; } catch { s = null; }
   if (!S) return;
   CLAUDE.sample = s;
-  if (s){ $("claudeSwitch").disabled = false; $("claudeState").textContent = "off"; }
+  if (s){ try { CLAUDE.limits = await s.limits(); } catch { CLAUDE.limits = null; }
+    $("thinkWho").innerHTML = `<option value="sel">Selected agent</option>` + S.agents.map(a => `<option value="${a.i}">${esc(a.name)}</option>`).join("") + `<option value="all">Everyone</option>`;
+    $("claudeSwitch").disabled = false; $("claudeState").textContent = "off"; }
   else { $("claudeState").textContent = "not available here"; }
 }
 const MOVE_WORDS = {search:"research at the Archive", think:"experiment and invent", build:"build", teach:"teach someone", chat:"socialize", trade:"trade", steal:"take resources", revenge:"retaliate in the game", apologize:"make amends", ally:"form an alliance", gather_food:"gather food", gather_mat:"gather materials", rest:"rest"};
@@ -1264,7 +1266,7 @@ function applyReflection(a, j, res){
   remember(a, `Deep thought: ${trace.thought}`, "claude");
 }
 /* One click = one request. For the Council, all five characters are covered in that single request. */
-async function deepThink(list){
+async function thinkOnce(list){
   if (!Array.isArray(list)) list = [list];
   list = list.filter(a => !a.deep);
   if (!CLAUDE.sample || !list.length) return;
@@ -1312,11 +1314,100 @@ Reply with only a JSON object in this shape, with one entry per character (${nam
     UI.dirty = true;
   }
 }
+async function ensurePerm(){
+  const perm = await getPerm();
+  if (!perm) return;
+  let st = await perm.state("sample");
+  if (st === "prompt"){ const r = await perm.request(["sample"]); st = r && r.sample; }
+  if (st === "denied") throw {code:"not_granted", message:"denied in permissions"};
+}
+function waitTicks(n, signal){
+  const target = S.tick + n, t0 = performance.now();
+  return new Promise(res => {
+    const check = () => {
+      if (!S || signal.aborted || S.tick >= target || performance.now() - t0 > 40000) return res();
+      later(check, 250);
+    };
+    check();
+  });
+}
+const REFLECTION_SCHEMA = {type:"object", properties:{
+  name:{type:"string"}, steps:{type:"array", items:{type:"string"}, description:"3 to 5 short first-person reasoning steps"},
+  thought:{type:"string", description:"one sentence summary of the plan"}, feeling:{type:"string"},
+  goal:{type:"string", enum:Object.keys(MOVE_WORDS)}, goal_target:{type:["string","null"]},
+  invention:{type:["object","null"], properties:{name:{type:"string"}, blurb:{type:"string"}, builds_on:{type:"array", items:{type:"string"}}}}
+}, required:["name","steps","thought","goal"]};
+/* Auto-thinking: ONE click starts ONE Claude call. Inside that call Claude repeatedly
+   reflects, lets game time pass through a page tool, and reflects again on what changed,
+   for as many rounds as the platform allows. No timers ever start a call. */
+async function autoThink(list){
+  list = list.filter(a => !a.deep);
+  if (!CLAUDE.sample || !list.length || CLAUDE.run) return;
+  if (!(CLAUDE.limits && CLAUDE.limits.tools)) return thinkOnce(list);
+  const ctl = new AbortController(); TIMERS.aborts.add(ctl);
+  CLAUDE.run = {ctl, list, cycle:0};
+  for (const a of list){ a.deep = true; a.deepErr = null; a.deepCode = null; a.deepCtl = ctl; say(a, "🧠 thinking very deeply…", 999); }
+  UI.dirty = true; syncClaudeUI();
+  const names = list.map(a => a.name);
+  const applyAll = (chars, res) => {
+    for (const a of list){
+      if (!S || !S.agents.includes(a)) continue;
+      const r = (chars || []).find(x => x && String(x.name || "").toLowerCase() === a.name.toLowerCase()) || (list.length === 1 && chars && chars[0]);
+      if (r) applyReflection(a, r, res);
+    }
+  };
+  const tool = {
+    name:"reflect_and_watch",
+    description:"Records one reflection per listed character (applied in the game right away), then lets game time pass and RETURNS the updated state of those characters plus recent game events. Call it once per cycle, one call at a time.",
+    inputSchema:{type:"object", properties:{characters:{type:"array", items:REFLECTION_SCHEMA}, turns:{type:"integer", minimum:30, maximum:300, description:"how many game turns to let pass before the next observation"}}, required:["characters"]},
+    async execute(input, context){
+      if (!S || context.signal.aborted) throw new Error("The game was stopped.");
+      applyAll(Array.isArray(input.characters) ? input.characters : [], {});
+      CLAUDE.run && CLAUDE.run.cycle++; syncClaudeUI();
+      const from = S.tick;
+      await waitTicks(clamp(Number(input.turns) || 80, 30, 300), context.signal);
+      if (!S || context.signal.aborted) throw new Error("The game was stopped.");
+      const evs = S.events.filter(e => e.t > from && (e.ai < 0 || list.some(a => a.i === e.ai) || list.some(a => e.text.includes(a.name)))).slice(-10).map(e => "turn " + e.t + ": " + e.text);
+      return `Now turn ${S.tick}, age: ${ERAS[S.era]}.${UI.paused ? " (The player has paused the game, so little changed.)" : ""}\n\n${list.map(brief).join("\n\n")}\n\nEvents since the last observation:\n${evs.join("\n") || "nothing notable"}`;
+    }
+  };
+  const prompt = `I'm running a turn-based civilization strategy game (a simple economy simulation, similar to a board game). Five game characters start in the Stone Age and research their way up a tech tree. Everything is fictional game state: resource counts and trust scores.
+Current age: ${ERAS[S.era]}. Turn ${S.tick}.
+The player wants to watch how ${names.length > 1 ? "these characters" : "this character"} (${names.join(", ")}) reason over time. Run an observe-and-reflect loop:
+1. Call reflect_and_watch with one short, thoughtful reflection for each listed character: how they might reason about their next move, written so the player can follow their logic. If it fits, include ONE new technology idea built from 2 or 3 of their known technology ids.
+2. Read the new state it returns and call it again with fresh reflections that respond to what changed.
+Repeat for as many cycles as you can, one call at a time. When you have to stop, reply with only the final reflections as JSON: {"characters":[ ...same shape as the tool's characters... ]}.
+Available moves (goal keys): ${Object.entries(MOVE_WORDS).map(([k,v]) => k + " (" + v + ")").join(", ")}.
+
+${list.map(brief).join("\n\n")}`;
+  try {
+    await ensurePerm();
+    const res = await CLAUDE.sample(prompt, {model:CLAUDE.model, effort:"medium", modelTier:"default", signal:ctl.signal, tools:[tool]});
+    if (!S) return;
+    const m = res.text.match(/\{[\s\S]*"characters"[\s\S]*\}/);
+    if (m){ try { applyAll(JSON.parse(m[0]).characters, res); } catch {} }
+    log("claude", -1, `🧠 Auto-thinking finished for ${names.join(", ")} after ${CLAUDE.run ? CLAUDE.run.cycle : 0} cycles.`);
+  } catch (e){
+    if (!S) return;
+    const {code, msg} = claudeError(e);
+    for (const a of list){ a.deepCode = code; a.deepErr = msg; }
+  } finally {
+    TIMERS.aborts.delete(ctl);
+    CLAUDE.run = null;
+    if (S) for (const a of list){ if (S.agents.includes(a)){ a.deep = false; a.deepCtl = null; } }
+    UI.dirty = true; if (S) syncClaudeUI();
+  }
+}
+function stopThinking(){ if (CLAUDE.run) CLAUDE.run.ctl.abort(); else if (S) S.agents.forEach(a => a.deepCtl && a.deepCtl.abort()); }
 function syncClaudeUI(){
   $("claudeSwitch").setAttribute("aria-checked", String(CLAUDE.on));
   $("modelSel").disabled = !CLAUDE.on;
-  if (CLAUDE.sample) $("claudeState").textContent = CLAUDE.on ? "on · uses your Claude usage" : "off";
-  $("councilBtn").hidden = !(CLAUDE.on && CLAUDE.sample);
+  const run = CLAUDE.run;
+  if (CLAUDE.sample) $("claudeState").textContent = run ? `auto-thinking · cycle ${run.cycle + 1}` : CLAUDE.on ? "on · uses your Claude usage" : "off";
+  const show = !!(CLAUDE.on && CLAUDE.sample);
+  $("thinkWho").hidden = !show; $("autoBtn").hidden = !show;
+  $("thinkWho").disabled = !!run;
+  $("autoBtn").textContent = run ? "■ Stop thinking" : "🧠 Start thinking";
   UI.dirty = true;
 }
 
@@ -1336,7 +1427,7 @@ async function annihilate(){
   TIMERS.to.forEach(id => clearTimeout(id)); TIMERS.to.clear();
   TIMERS.iv.forEach(id => clearInterval(id)); TIMERS.iv.clear();
   TIMERS.aborts.forEach(c => { try { c.abort(); } catch {} }); TIMERS.aborts.clear();
-  CLAUDE.on = false;
+  CLAUDE.on = false; CLAUDE.run = null;
   // 2. overwrite and drop every piece of state
   if (S){ scrub(S); }
   S = null;
@@ -1392,8 +1483,14 @@ document.querySelectorAll("[data-speed]").forEach(b => b.addEventListener("click
   UI.speed = +b.dataset.speed; document.querySelectorAll("[data-speed]").forEach(x => x.setAttribute("aria-pressed", String(x === b)));
   if (UI.paused) togglePause();
 }));
-$("claudeSwitch").addEventListener("click", () => { if (!CLAUDE.sample) return; CLAUDE.on = !CLAUDE.on; syncClaudeUI(); });
-$("councilBtn").addEventListener("click", () => { if (S && CLAUDE.on) deepThink(S.agents); });
+$("claudeSwitch").addEventListener("click", () => { if (!CLAUDE.sample) return; CLAUDE.on = !CLAUDE.on; if (!CLAUDE.on) stopThinking(); syncClaudeUI(); });
+$("autoBtn").addEventListener("click", () => {
+  if (!S || !CLAUDE.on) return;
+  if (CLAUDE.run || S.agents.some(a => a.deep)){ stopThinking(); return; }
+  const who = $("thinkWho").value;
+  const list = who === "all" ? S.agents : who === "sel" ? [S.agents[UI.sel]] : [S.agents[+who]];
+  autoThink(list);
+});
 $("modelSel").addEventListener("change", e => { CLAUDE.model = e.target.value; UI.dirty = true; });
 $("bondsBtn").addEventListener("click", e => { UI.bonds = !UI.bonds; e.currentTarget.setAttribute("aria-pressed", String(UI.bonds)); });
 $("bubblesBtn").addEventListener("click", e => { UI.bubbles = !UI.bubbles; e.currentTarget.setAttribute("aria-pressed", String(UI.bubbles)); });
@@ -1410,8 +1507,8 @@ $("tabbody").addEventListener("click", e => {
   const th = e.target.closest("[data-th]");
   if (th){ UI.histSel = {t:+th.dataset.th, src:th.dataset.src}; renderPanels(true); return; }
   if (e.target.closest("#liveBtn")){ UI.histSel = null; renderPanels(true); return; }
-  if (e.target.closest("#deepBtn")){ deepThink(S.agents[UI.sel]); renderPanels(true); return; }
-  if (e.target.closest("#stopDeep")){ const a = S.agents[UI.sel]; a.deepCtl && a.deepCtl.abort(); return; }
+  if (e.target.closest("#deepBtn")){ autoThink([S.agents[UI.sel]]); renderPanels(true); return; }
+  if (e.target.closest("#stopDeep")){ stopThinking(); return; }
   if (e.target.closest("#permBtn")){ openPermissions(); return; }
 });
 cv.addEventListener("click", e => {
