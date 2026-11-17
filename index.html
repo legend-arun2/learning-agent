@@ -1120,7 +1120,7 @@ function renderMind(){
   let h = `<div class="who"><div class="avatar" style="background:${a.color}22;border:2px solid ${a.color}">${a.mood}</div><div><h2>${esc(a.name)}</h2><div class="small">${esc(a.role)} · ${a.known.size} discoveries · invented ${a.stats.invented}</div>
     <div class="traits">${a.goal ? `<span class="pill" style="border-color:var(--claude);color:var(--claude)">goal: ${esc(a.goal.text)}</span>` : ""}${a.wish.slice(0,3).map(w => `<span class="pill">wants: ${esc(BY[w]?.name || w)}</span>`).join("")}${[...a.allies].map(j => `<span class="pill" style="border-color:var(--good)">ally: ${esc(S.agents[j].name)}</span>`).join("")}</div></div></div>`;
   if (claudeOn) h += `<div class="deep"><button class="btn-claude" id="deepBtn" ${a.deep ? "disabled" : ""}>${a.deep ? "Thinking deeply…" : `🧠 Deep think as ${esc(a.name)}`}</button>${a.deep ? `<button class="btn" id="stopDeep">Stop</button>` : ""}<span class="small">${CLAUDE.model === "claude-opus-5-5" ? "Opus" : "Sonnet"} · medium · may invent something new</span></div>`;
-  if (a.deepErr) h += `<p class="small" style="color:var(--bad)">${esc(a.deepErr)}</p>`;
+  if (a.deepErr) h += `<div class="small" style="color:var(--bad);display:flex;flex-direction:column;gap:6px"><span>${esc(a.deepErr)} <span class="mono">(${esc(a.deepCode)})</span></span>${a.deepCode === "not_granted" ? `<span><button class="btn-claude" id="permBtn">Allow Claude for this page</button></span><span class="small" id="permHelp" style="color:var(--muted)">Opens this page's Permissions panel. Turn Claude on there, then click Deep think again.</span>` : ""}</div>`;
   h += `<section class="sec"><h3>${UI.histSel ? "Past thought · " + fmtDay(tr.t) : "Thinking right now"}${UI.histSel ? `<button class="btn" id="liveBtn">Back to live</button>` : ""}</h3>${tr ? traceHTML(a, tr) : `<p class="empty">No thoughts yet.</p>`}</section>`;
   h += `<section class="sec"><h3>Thought history</h3><div class="hist">${a.thoughts.slice(-24).reverse().map(t => `<button data-th="${t.t}" data-src="${t.src}" aria-pressed="${UI.histSel && UI.histSel.t === t.t && UI.histSel.src === t.src}"><span class="mono tk">${fmtDay(t.t).replace("Day ","d")}</span><span>${t.src === "claude" ? "🧠" : "·"}</span><span class="${t.src === "claude" ? "src-claude" : ""}">${esc(t.src === "claude" ? t.thought : t.label + " → " + t.outcome)}</span></button>`).join("")}</div></section>`;
   h += `<section class="sec"><h3>Mind map <span class="small" style="text-transform:none;letter-spacing:0">filled = known · orange = new · dashed = within reach · yellow = wants</span></h3><div class="svgwrap">${mindMapSVG(a, false)}</div></section>`;
@@ -1183,6 +1183,22 @@ function renderPanels(force){
    Ask Claude (optional, off by default, only on a button click)
    ============================================================ */
 const CLAUDE = {sample:null, on:false, model:"claude-sonnet-5-5"};
+let PERM;
+async function getPerm(){ if (PERM === undefined){ try { PERM = window.claude && typeof window.claude.use === "function" ? await window.claude.use("permissions") : null; } catch { PERM = null; } } return PERM; }
+async function openPermissions(){
+  const perm = await getPerm();
+  const a = S && S.agents[UI.sel];
+  try {
+    if (!perm) throw new Error("no panel");
+    await perm.manage();
+    const st = await perm.state("sample");
+    if (a && st !== "denied"){ a.deepErr = null; a.deepCode = null; }
+    else if (a) a.deepErr = "Claude is still blocked. In the page's Permissions panel, switch Claude on.";
+  } catch {
+    if (a) a.deepErr = "The Permissions panel couldn't open from here. Use the artifact's menu (top right of the page), open Permissions, and switch Claude on.";
+  }
+  UI.dirty = true; renderPanels(true);
+}
 async function initClaude(){
   let s = null;
   try { s = window.claude && typeof window.claude.use === "function" ? await window.claude.use("sample") : null; } catch { s = null; }
@@ -1193,7 +1209,7 @@ async function initClaude(){
 }
 async function deepThink(a){
   if (!CLAUDE.sample || a.deep) return;
-  a.deep = true; a.deepErr = null; UI.dirty = true; say(a, "🧠 thinking very deeply…", 999);
+  a.deep = true; a.deepErr = null; a.deepCode = null; UI.dirty = true; say(a, "🧠 thinking very deeply…", 999);
   const ctl = new AbortController(); TIMERS.aborts.add(ctl); a.deepCtl = ctl;
   const known = [...a.known];
   const reach = reachable(a).map(d => d.name);
@@ -1211,6 +1227,12 @@ Think as ${a.name} would, using only what they know. You may imagine ONE origina
 Reply with ONLY a JSON object, no other text:
 {"steps":["3 to 5 short reasoning steps in first person"],"thought":"one sentence inner monologue","feeling":"one or two words","goal":"one of: search, think, build, teach, chat, trade, steal, revenge, apologize, ally, gather_food, gather_mat, rest","goal_target":"a name from ${S.agents.filter(b=>b!==a).map(b=>b.name).join("/")} or null","invention":null or {"name":"short name","blurb":"one sentence on what it does","builds_on":["2-3 ids from the known list"]}}`;
   try {
+    const perm = await getPerm();
+    if (perm){
+      let st = await perm.state("sample");
+      if (st === "prompt"){ const r = await perm.request(["sample"]); st = r && r.sample; }
+      if (st === "denied") throw {code:"not_granted", message:"denied in permissions"};
+    }
     const res = await CLAUDE.sample(prompt, {model:CLAUDE.model, effort:"medium", modelTier:"default", signal:ctl.signal, cache:false});
     if (!S || !S.agents.includes(a)) return;
     const m = res.text.match(/\{[\s\S]*\}/);
@@ -1249,8 +1271,14 @@ Reply with ONLY a JSON object, no other text:
   } catch (e){
     if (!S) return;
     const code = e && e.code;
-    a.deepErr = code === "cancelled" ? null : code === "not_granted" ? "Claude access was declined for this page." : code === "rate_limited" ? "Too many requests. Wait a minute, then try again." : (e && e.message) || "Claude couldn't answer.";
-    if (code === "not_granted"){ CLAUDE.on = false; syncClaudeUI(); }
+    a.deepCode = code || "unknown";
+    a.deepErr = code === "cancelled" ? null
+      : code === "not_granted" ? "This page isn't allowed to use Claude yet. A saved refusal blocks it until you turn it back on."
+      : code === "sampling_disabled" ? "Claude isn't enabled for your account or organization, so this page can't use it."
+      : code === "session_expired" ? "Your claude.ai sign-in expired. Sign in again, then retry."
+      : code === "rate_limited" ? "You've hit a usage or rate limit. Wait a minute, then try again."
+      : code === "capability_disabled" ? "Claude is allowed but can't run in this view. Open the page directly on claude.ai."
+      : ((e && e.message) || "Claude couldn't answer.");
     say(a, "🤔 …", 30);
   } finally {
     TIMERS.aborts.delete(ctl);
@@ -1355,6 +1383,7 @@ $("tabbody").addEventListener("click", e => {
   if (e.target.closest("#liveBtn")){ UI.histSel = null; renderPanels(true); return; }
   if (e.target.closest("#deepBtn")){ deepThink(S.agents[UI.sel]); renderPanels(true); return; }
   if (e.target.closest("#stopDeep")){ const a = S.agents[UI.sel]; a.deepCtl && a.deepCtl.abort(); return; }
+  if (e.target.closest("#permBtn")){ openPermissions(); return; }
 });
 cv.addEventListener("click", e => {
   if (!S) return;
