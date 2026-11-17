@@ -1283,15 +1283,36 @@ async function initClaude(){
     $("claudeSwitch").disabled = false; $("claudeState").textContent = "off"; }
   else { $("claudeState").textContent = "not available here"; }
 }
-const MOVE_WORDS = {search:"research at the Archive", think:"experiment and invent", build:"build", teach:"teach someone", chat:"socialize", trade:"trade", steal:"take resources", revenge:"retaliate in the game", apologize:"make amends", ally:"form an alliance", gather_food:"gather food", gather_mat:"gather materials", rest:"rest"};
+const MOVE_WORDS = {search:"research at the Archive", think:"experiment and invent", build:"build", teach:"teach someone", chat:"socialize", trade:"trade", steal:"take resources", revenge:"respond to a rival", apologize:"make amends", ally:"form an alliance", gather_food:"gather food", gather_mat:"gather materials", rest:"rest"};
+/* Claude sees board-game wording; the page maps it back to its own move keys. */
+const GOAL_OUT = {steal:"take_resources", revenge:"respond_to_rival"};
+const GOAL_IN = {take_resources:"steal", respond_to_rival:"revenge"};
+const goalKeys = () => Object.keys(MOVE_WORDS).map(k => GOAL_OUT[k] || k);
+const goalList = () => Object.entries(MOVE_WORDS).map(([k, v]) => (GOAL_OUT[k] || k) + " (" + v + ")").join(", ");
+function neutral(t){
+  return String(t)
+    .replace(/[😠😡😤🤫⚔️⚖️]/gu, "")
+    .replace(/\bRevenge: /g, "Rivalry move: ")
+    .replace(/\btook revenge on\b/gi, "made a rivalry move against")
+    .replace(/\brevenge\b/gi, "a response")
+    .replace(/\bsecretly stole\b/gi, "quietly took")
+    .replace(/\bstole\b/gi, "took").replace(/\bstealing\b/gi, "taking").replace(/\bsteal\b/gi, "take")
+    .replace(/\bwrecked\b/gi, "damaged").replace(/\bspoiled\b/gi, "used up")
+    .replace(/turned everyone against (\w+) with rumours/gi, "lowered $1's reputation")
+    .replace(/turned everyone against me with rumours/gi, "lowered my reputation")
+    .replace(/\bgrudge\b/gi, "rivalry").replace(/\bwon't forget\b/gi, "will remember this")
+    .replace(/This isn't over\./gi, "").replace(/\bthief\b/gi, "taker")
+    .replace(/\bpunished\b/gi, "fined").replace(/\bcaught\b/gi, "noticed")
+    .replace(/\s+/g, " ").trim();
+}
 function brief(a){
   return `Character: ${a.name}. Personality scores (0 to 1): ${TRAITS.map(t => t + " " + a.tr[t].toFixed(2)).join(", ")}.
 Needs (0 = fine, 100 = urgent): hunger ${Math.round(a.needs.hunger)}, fatigue ${Math.round(a.needs.fatigue)}, loneliness ${Math.round(a.needs.loneliness)}. Food ${a.food}, materials ${a.mats}.
 Technologies known (ids): ${[...a.known].join(", ")}.
 Technologies now researchable: ${reachable(a).map(d => d.name).join(", ") || "none"}.
 Trust scores toward others (-100 to 100): ${S.agents.filter(b => b !== a).map(b => b.name + " " + a.trust[b.i]).join(", ")}.
-Rivalries in the game: ${a.grudges.filter(g => g.sev > 1).map(g => S.agents[g.against].name + " (" + g.reason + ")").join("; ") || "none"}.
-Recent game events: ${a.mem.slice(-5).map(m => m.text).join(" | ")}.`;
+Rivalries in the game: ${a.grudges.filter(g => g.sev > 1).map(g => S.agents[g.against].name + " (" + neutral(g.reason) + ")").join("; ") || "none"}.
+Recent game events: ${a.mem.slice(-5).map(m => neutral(m.text)).join(" | ")}.`;
 }
 function claudeError(e){
   const code = (e && e.code) || "unknown";
@@ -1300,7 +1321,7 @@ function claudeError(e){
     : code === "sampling_disabled" ? "Claude isn't enabled for your account or organization, so this page can't use it."
     : code === "session_expired" ? "Your claude.ai sign-in expired. Sign in again, then retry."
     : code === "rate_limited" ? "You've hit a usage or rate limit. Wait a minute, then try again."
-    : code === "refused" ? "Claude chose not to answer this one. Try again; a different moment in the game usually works."
+    : code === "refused" ? "Claude declined this request. The offline inner voice keeps running; try again later in the game."
     : code === "capability_disabled" ? "Claude is allowed but can't run in this view. Open the page directly on claude.ai."
     : ((e && e.message) || "Claude couldn't answer.");
   return {code, msg};
@@ -1310,6 +1331,7 @@ function applyReflection(a, j, res){
   const applied = res.modelApplied || null;
   const trace = {t:S.tick, src:"claude", modelLabel:label, modelApplied:applied, substituted: !!(applied && !applied.startsWith(CLAUDE.model)),
     steps:(Array.isArray(j.steps) ? j.steps : []).slice(0, 6).map(String), thought:String(j.thought || "…"), feeling:String(j.feeling || "?"), goalText:"", invention:null};
+  if (GOAL_IN[j.goal]) j.goal = GOAL_IN[j.goal];
   if (MOVE_WORDS[j.goal]){
     const tgt = S.agents.find(b => b !== a && j.goal_target && b.name.toLowerCase() === String(j.goal_target).toLowerCase());
     a.goal = {action:j.goal, target:tgt ? tgt.i : null, until:S.tick + 160, text:(ACTION_LABEL[j.goal] || j.goal) + (tgt ? " " + tgt.name : "")};
@@ -1352,7 +1374,7 @@ Please write a short, thoughtful explanation of how ${names.length > 1 ? "each o
 ${list.map(brief).join("\n\n")}
 
 For each character, if it fits, also suggest ONE new technology idea they could invent from 2 or 3 of their known technology ids (not one already listed).
-Available moves: ${Object.entries(MOVE_WORDS).map(([k,v]) => k + " (" + v + ")").join(", ")}.
+Available moves: ${goalList()}.
 Reply with only a JSON object in this shape, with one entry per character (${names.join(", ")}):
 {"characters":[{"name":"character name","steps":["3 to 5 short reasoning steps, in first person"],"thought":"one sentence summary of their plan","feeling":"one or two words","goal":"one move key from the list","goal_target":"another character's name, or null","invention":null or {"name":"short name","blurb":"one sentence on what it does","builds_on":["2-3 ids from their known list"]}}]}`;
   try {
@@ -1370,7 +1392,8 @@ Reply with only a JSON object in this shape, with one entry per character (${nam
     const arr = Array.isArray(j.characters) ? j.characters : [j];
     for (const a of list){
       if (!S.agents.includes(a)) continue;
-      const r = arr.find(x => x && String(x.name || "").toLowerCase() === a.name.toLowerCase()) || (list.length === 1 ? arr[0] : null);
+      const fl = arr.map(fromFlat).filter(Boolean);
+      const r = fl.find(x => String(x.name || "").toLowerCase() === a.name.toLowerCase()) || (list.length === 1 ? fl[0] : null);
       if (r) applyReflection(a, r, res);
       else { a.deepCode = "missing"; a.deepErr = "Claude's answer skipped this character."; }
     }
@@ -1408,7 +1431,7 @@ const REFLECTION_SCHEMA = {type:"object", properties:{
   steps:{type:"string", description:"3 to 5 short first-person reasoning steps, separated by ' | '"},
   thought:{type:"string", description:"one sentence summary of the plan"},
   feeling:{type:"string"},
-  goal:{type:"string", description:"one move key: " + Object.keys(MOVE_WORDS).join(", ")},
+  goal:{type:"string", description:"one move key: " + goalKeys().join(", ")},
   goal_target:{type:"string", description:"another character's name, or empty"},
   invention_name:{type:"string", description:"optional new technology idea, or empty"},
   invention_blurb:{type:"string", description:"one sentence on what it does, or empty"},
@@ -1430,6 +1453,7 @@ async function autoThink(list){
   if (!(CLAUDE.limits && CLAUDE.limits.tools)) return thinkOnce(list);
   const ctl = new AbortController(); TIMERS.aborts.add(ctl);
   CLAUDE.run = {ctl, list, cycle:0};
+  let fallback = false;
   for (const a of list){ a.deep = true; a.deepErr = null; a.deepCode = null; a.deepCtl = ctl; say(a, "🧠 thinking very deeply…", 999); }
   UI.dirty = true; syncClaudeUI();
   const names = list.map(a => a.name);
@@ -1452,7 +1476,7 @@ async function autoThink(list){
       const from = S.tick;
       await waitTicks(clamp(Number(input.turns) || 300, 100, 800), context.signal);
       if (!S || context.signal.aborted) throw new Error("The game was stopped.");
-      const evs = S.events.filter(e => e.t > from && (e.ai < 0 || list.some(a => a.i === e.ai) || list.some(a => e.text.includes(a.name)))).slice(-16).map(e => "turn " + e.t + ": " + e.text);
+      const evs = S.events.filter(e => e.t > from && (e.ai < 0 || list.some(a => a.i === e.ai) || list.some(a => e.text.includes(a.name)))).slice(-16).map(e => "turn " + e.t + ": " + neutral(e.text));
       return `Now turn ${S.tick}, age: ${ERAS[S.era]}.${UI.paused ? " (The player has paused the game, so little changed.)" : ""}\n\n${list.map(brief).join("\n\n")}\n\nEvents since the last observation:\n${evs.join("\n") || "nothing notable"}`;
     }
   };
@@ -1461,8 +1485,8 @@ Current age: ${ERAS[S.era]}. Turn ${S.tick}.
 The player wants to watch how ${names.length > 1 ? "these characters" : "this character"} (${names.join(", ")}) reason over time. Run an observe-and-reflect loop:
 1. Call reflect_and_watch with one short, thoughtful reflection for each listed character: how they might reason about their next move, written so the player can follow their logic. If it fits, include ONE new technology idea built from 2 or 3 of their known technology ids.
 2. Read the new state it returns and call it again with fresh reflections that respond to what changed.
-Let a long stretch pass each time (turns 200-500) so each cycle covers real change, and repeat for as many cycles as you can, one call at a time. When you have to stop, reply with only the final reflections as JSON: {"characters":[ ...same shape as the tool's characters... ]}.
-Available moves (goal keys): ${Object.entries(MOVE_WORDS).map(([k,v]) => k + " (" + v + ")").join(", ")}.
+Let a long stretch pass each time (turns 200-500) so each cycle covers real change. Do 4 cycles, one call at a time. When you have to stop, reply with only the final reflections as JSON: {"characters":[ ...same shape as the tool's characters... ]}.
+Available moves (goal keys): ${goalList()}.
 
 ${list.map(brief).join("\n\n")}`;
   try {
@@ -1475,13 +1499,15 @@ ${list.map(brief).join("\n\n")}`;
   } catch (e){
     if (!S) return;
     const {code, msg} = claudeError(e);
-    for (const a of list){ a.deepCode = code; a.deepErr = msg; }
+    if (code === "refused" && !ctl.signal.aborted) fallback = true;
+    else for (const a of list){ a.deepCode = code; a.deepErr = msg; }
   } finally {
     TIMERS.aborts.delete(ctl);
     CLAUDE.run = null;
     if (S) for (const a of list){ if (S.agents.includes(a)){ a.deep = false; a.deepCtl = null; } }
     UI.dirty = true; if (S) syncClaudeUI();
   }
+  if (fallback && S){ log("claude", -1, "Claude passed on the multi-cycle request, so the page asked for one simple reflection instead."); return thinkOnce(list.filter(a => S.agents.includes(a))); }
 }
 function stopThinking(){ if (CLAUDE.run) CLAUDE.run.ctl.abort(); else if (S) S.agents.forEach(a => a.deepCtl && a.deepCtl.abort()); }
 function syncClaudeUI(){
