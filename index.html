@@ -210,6 +210,7 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
         <option value="claude-opus-5-5">Opus · medium</option>
       </select>
       <span class="small" id="claudeState">checking…</span>
+      <button class="btn-claude" id="councilBtn" hidden title="One request: all five agents reflect at once">🧠 Council: all five think</button>
     </div>
     <div class="wipe-wrap">
       <button class="wipe" id="wipeBtn" aria-describedby="wipeHelp"><i class="fill" id="wipeFill"></i><span>☢ Hold to wipe everything</span></button>
@@ -596,7 +597,7 @@ function start(a, o, trace){
     case "ally": dest = near(tb); dur = 8; bubble = `🤝 ${tb.name}, let's stand together`; break;
   }
   a.act = {o, trace, dest, dur, left:dur, arrived:false};
-  say(a, bubble, 999);
+  if (!(a.claudeBubbleUntil > S.tick)) say(a, bubble, 999);
   a.mood = moodOf(a, o.action);
 }
 const jitter = (p, r) => ({x:p.x + (rnd()-.5)*r*2, y:p.y + (rnd()-.5)*r*2});
@@ -723,7 +724,7 @@ function finish(a){
   }
   trace.outcome = out;
   if (learned){ const d = BY[learned]; trace.learned = `New knowledge: ${d.name}. ${d.blurb}`; a.wish = a.wish.filter(w=>w!==learned); }
-  say(a, outcomeBubble(o, out), 55);
+  if (!(a.claudeBubbleUntil > S.tick)) say(a, outcomeBubble(o, out), 55);
   a.act = null;
 }
 function outcomeBubble(o, out){
@@ -1017,6 +1018,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":
 const fmtDay = t => "Day " + t.toLocaleString();
 
 function renderTop(){
+  const busy = S.agents.some(a => a.deep); const cb = $("councilBtn"); cb.disabled = busy; cb.textContent = busy ? "🧠 Thinking…" : "🧠 Council: all five think";
   $("eraName").textContent = ERAS[S.era];
   $("dayLbl").textContent = fmtDay(S.tick);
   $("eraTrack").innerHTML = ERAS.map((e, i) => `<span class="${i < S.era ? "on" : i === S.era ? "cur" : ""}" title="${e}"></span>`).join("");
@@ -1121,6 +1123,7 @@ function renderMind(){
     <div class="traits">${a.goal ? `<span class="pill" style="border-color:var(--claude);color:var(--claude)">goal: ${esc(a.goal.text)}</span>` : ""}${a.wish.slice(0,3).map(w => `<span class="pill">wants: ${esc(BY[w]?.name || w)}</span>`).join("")}${[...a.allies].map(j => `<span class="pill" style="border-color:var(--good)">ally: ${esc(S.agents[j].name)}</span>`).join("")}</div></div></div>`;
   if (claudeOn) h += `<div class="deep"><button class="btn-claude" id="deepBtn" ${a.deep ? "disabled" : ""}>${a.deep ? "Thinking deeply…" : `🧠 Deep think as ${esc(a.name)}`}</button>${a.deep ? `<button class="btn" id="stopDeep">Stop</button>` : ""}<span class="small">${CLAUDE.model === "claude-opus-5-5" ? "Opus" : "Sonnet"} · medium · may invent something new</span></div>`;
   if (a.deepErr) h += `<div class="small" style="color:var(--bad);display:flex;flex-direction:column;gap:6px"><span>${esc(a.deepErr)} <span class="mono">(${esc(a.deepCode)})</span></span>${a.deepCode === "not_granted" ? `<span><button class="btn-claude" id="permBtn">Allow Claude for this page</button></span><span class="small" id="permHelp" style="color:var(--muted)">Opens this page's Permissions panel. Turn Claude on there, then click Deep think again.</span>` : ""}</div>`;
+  if (a.lastClaude) h += `<section class="sec"><h3>🧠 Claude's latest reflection <span class="small mono" style="text-transform:none;letter-spacing:0">${fmtDay(a.lastClaude.t)}</span></h3>${traceHTML(a, a.lastClaude)}</section>`;
   h += `<section class="sec"><h3>${UI.histSel ? "Past thought · " + fmtDay(tr.t) : "Thinking right now"}${UI.histSel ? `<button class="btn" id="liveBtn">Back to live</button>` : ""}</h3>${tr ? traceHTML(a, tr) : `<p class="empty">No thoughts yet.</p>`}</section>`;
   h += `<section class="sec"><h3>Thought history</h3><div class="hist">${a.thoughts.slice(-24).reverse().map(t => `<button data-th="${t.t}" data-src="${t.src}" aria-pressed="${UI.histSel && UI.histSel.t === t.t && UI.histSel.src === t.src}"><span class="mono tk">${fmtDay(t.t).replace("Day ","d")}</span><span>${t.src === "claude" ? "🧠" : "·"}</span><span class="${t.src === "claude" ? "src-claude" : ""}">${esc(t.src === "claude" ? t.thought : t.label + " → " + t.outcome)}</span></button>`).join("")}</div></section>`;
   h += `<section class="sec"><h3>Mind map <span class="small" style="text-transform:none;letter-spacing:0">filled = known · orange = new · dashed = within reach · yellow = wants</span></h3><div class="svgwrap">${mindMapSVG(a, false)}</div></section>`;
@@ -1207,28 +1210,78 @@ async function initClaude(){
   if (s){ $("claudeSwitch").disabled = false; $("claudeState").textContent = "off"; }
   else { $("claudeState").textContent = "not available here"; }
 }
-async function deepThink(a){
-  if (!CLAUDE.sample || a.deep) return;
-  a.deep = true; a.deepErr = null; a.deepCode = null; UI.dirty = true; say(a, "🧠 thinking very deeply…", 999);
-  const ctl = new AbortController(); TIMERS.aborts.add(ctl); a.deepCtl = ctl;
-  const known = [...a.known];
-  const reach = reachable(a).map(d => d.name);
-  const MOVE_WORDS = {search:"research at the Archive", think:"experiment and invent", build:"build", teach:"teach someone", chat:"socialize", trade:"trade", steal:"take resources", revenge:"retaliate in the game", apologize:"make amends", ally:"form an alliance", gather_food:"gather food", gather_mat:"gather materials", rest:"rest"};
-  const prompt = `I'm running a turn-based civilization strategy game (a simple economy simulation, similar to a board game). Five game characters start in the Stone Age and research their way up a tech tree. Please write a short, thoughtful explanation of how the character "${a.name}" might reason about their next move, so the player can follow the character's logic. Everything is fictional game state: resource counts and trust scores.
-
-Character: ${a.name}. Personality scores (0 to 1): ${TRAITS.map(t => t + " " + a.tr[t].toFixed(2)).join(", ")}.
-Current age: ${ERAS[S.era]}. Turn ${S.tick}.
+const MOVE_WORDS = {search:"research at the Archive", think:"experiment and invent", build:"build", teach:"teach someone", chat:"socialize", trade:"trade", steal:"take resources", revenge:"retaliate in the game", apologize:"make amends", ally:"form an alliance", gather_food:"gather food", gather_mat:"gather materials", rest:"rest"};
+function brief(a){
+  return `Character: ${a.name}. Personality scores (0 to 1): ${TRAITS.map(t => t + " " + a.tr[t].toFixed(2)).join(", ")}.
 Needs (0 = fine, 100 = urgent): hunger ${Math.round(a.needs.hunger)}, fatigue ${Math.round(a.needs.fatigue)}, loneliness ${Math.round(a.needs.loneliness)}. Food ${a.food}, materials ${a.mats}.
-Technologies known (ids): ${known.join(", ")}.
-Technologies now researchable: ${reach.join(", ") || "none"}.
-Trust scores toward other characters (-100 to 100): ${S.agents.filter(b => b !== a).map(b => b.name + " " + a.trust[b.i]).join(", ")}.
+Technologies known (ids): ${[...a.known].join(", ")}.
+Technologies now researchable: ${reachable(a).map(d => d.name).join(", ") || "none"}.
+Trust scores toward others (-100 to 100): ${S.agents.filter(b => b !== a).map(b => b.name + " " + a.trust[b.i]).join(", ")}.
 Rivalries in the game: ${a.grudges.filter(g => g.sev > 1).map(g => S.agents[g.against].name + " (" + g.reason + ")").join("; ") || "none"}.
-Recent game events: ${a.mem.slice(-6).map(m => m.text).join(" | ")}.
+Recent game events: ${a.mem.slice(-5).map(m => m.text).join(" | ")}.`;
+}
+function claudeError(e){
+  const code = (e && e.code) || "unknown";
+  const msg = code === "cancelled" ? null
+    : code === "not_granted" ? "This page isn't allowed to use Claude yet. A saved refusal blocks it until you turn it back on."
+    : code === "sampling_disabled" ? "Claude isn't enabled for your account or organization, so this page can't use it."
+    : code === "session_expired" ? "Your claude.ai sign-in expired. Sign in again, then retry."
+    : code === "rate_limited" ? "You've hit a usage or rate limit. Wait a minute, then try again."
+    : code === "refused" ? "Claude chose not to answer this one. Try again; a different moment in the game usually works."
+    : code === "capability_disabled" ? "Claude is allowed but can't run in this view. Open the page directly on claude.ai."
+    : ((e && e.message) || "Claude couldn't answer.");
+  return {code, msg};
+}
+function applyReflection(a, j, res){
+  const label = CLAUDE.model === "claude-opus-5-5" ? "Opus · medium" : "Sonnet · medium";
+  const applied = res.modelApplied || null;
+  const trace = {t:S.tick, src:"claude", modelLabel:label, modelApplied:applied, substituted: !!(applied && !applied.startsWith(CLAUDE.model)),
+    steps:(Array.isArray(j.steps) ? j.steps : []).slice(0, 6).map(String), thought:String(j.thought || "…"), feeling:String(j.feeling || "?"), goalText:"", invention:null};
+  if (MOVE_WORDS[j.goal]){
+    const tgt = S.agents.find(b => b !== a && j.goal_target && b.name.toLowerCase() === String(j.goal_target).toLowerCase());
+    a.goal = {action:j.goal, target:tgt ? tgt.i : null, until:S.tick + 160, text:(ACTION_LABEL[j.goal] || j.goal) + (tgt ? " " + tgt.name : "")};
+    trace.goalText = a.goal.text + " (boosted for the next 160 days)";
+  } else trace.goalText = "none";
+  if (j.invention && j.invention.name && Array.isArray(j.invention.builds_on)){
+    const pre = j.invention.builds_on.filter(id => a.known.has(id)).slice(0, 3);
+    const name = String(j.invention.name).slice(0, 40);
+    if (pre.length >= 1 && !CORPUS.some(d => d.name.toLowerCase() === name.toLowerCase())){
+      const id = "custom_" + (++S.customCount);
+      const era = Math.max(...pre.map(p => BY[p].era));
+      const d = {id, name, era, pre, q:"what " + name + " is", blurb:String(j.invention.blurb || "").slice(0, 200), custom:true};
+      CORPUS.push(d); BY[id] = d;
+      learn(a, id, "claude"); a.stats.invented++;
+      trace.invention = `${name}: ${d.blurb}`;
+      log("claude", a.i, `✦ ${a.name} imagined an original invention: ${name}.`);
+      remember(a, `I imagined something new: ${name}.`, "invent");
+    }
+  }
+  a.thoughts.push(trace); if (a.thoughts.length > 60) a.thoughts.shift();
+  a.mood = "🤩";
+  a.lastClaude = trace; a.claudeBubbleUntil = S.tick + 150;
+  say(a, "🧠 " + trace.thought, 150);
+  log("claude", a.i, `🧠 ${a.name} reflected: "${trace.thought}"`);
+  remember(a, `Deep thought: ${trace.thought}`, "claude");
+}
+/* One click = one request. For the Council, all five characters are covered in that single request. */
+async function deepThink(list){
+  if (!Array.isArray(list)) list = [list];
+  list = list.filter(a => !a.deep);
+  if (!CLAUDE.sample || !list.length) return;
+  const ctl = new AbortController(); TIMERS.aborts.add(ctl);
+  for (const a of list){ a.deep = true; a.deepErr = null; a.deepCode = null; a.deepCtl = ctl; say(a, "🧠 thinking very deeply…", 999); }
+  UI.dirty = true;
+  const names = list.map(a => a.name);
+  const prompt = `I'm running a turn-based civilization strategy game (a simple economy simulation, similar to a board game). Five game characters start in the Stone Age and research their way up a tech tree. Everything is fictional game state: resource counts and trust scores.
+Current age: ${ERAS[S.era]}. Turn ${S.tick}.
+Please write a short, thoughtful explanation of how ${names.length > 1 ? "each of these characters" : "this character"} might reason about their next move, so the player can follow their logic.
 
-Also, if it fits, suggest ONE new technology idea the character could invent from 2 or 3 of the known technology ids (not one already listed).
+${list.map(brief).join("\n\n")}
+
+For each character, if it fits, also suggest ONE new technology idea they could invent from 2 or 3 of their known technology ids (not one already listed).
 Available moves: ${Object.entries(MOVE_WORDS).map(([k,v]) => k + " (" + v + ")").join(", ")}.
-Reply with only a JSON object in this shape:
-{"steps":["3 to 5 short reasoning steps, written in first person as ${a.name}"],"thought":"one sentence summary of ${a.name}'s plan","feeling":"one or two words","goal":"one move key from the list","goal_target":"one of ${S.agents.filter(b=>b!==a).map(b=>b.name).join(", ")}, or null","invention":null or {"name":"short name","blurb":"one sentence on what it does","builds_on":["2-3 ids from the known list"]}}`;
+Reply with only a JSON object in this shape, with one entry per character (${names.join(", ")}):
+{"characters":[{"name":"character name","steps":["3 to 5 short reasoning steps, in first person"],"thought":"one sentence summary of their plan","feeling":"one or two words","goal":"one move key from the list","goal_target":"another character's name, or null","invention":null or {"name":"short name","blurb":"one sentence on what it does","builds_on":["2-3 ids from their known list"]}}]}`;
   try {
     const perm = await getPerm();
     if (perm){
@@ -1237,62 +1290,33 @@ Reply with only a JSON object in this shape:
       if (st === "denied") throw {code:"not_granted", message:"denied in permissions"};
     }
     const res = await CLAUDE.sample(prompt, {model:CLAUDE.model, effort:"medium", modelTier:"default", signal:ctl.signal, cache:false});
-    if (!S || !S.agents.includes(a)) return;
+    if (!S) return;
     const m = res.text.match(/\{[\s\S]*\}/);
     if (!m) throw {code:"parse", message:"Claude's answer wasn't readable."};
     const j = JSON.parse(m[0]);
-    const label = CLAUDE.model === "claude-opus-5-5" ? "Opus · medium" : "Sonnet · medium";
-    const applied = res.modelApplied || null;
-    const trace = {t:S.tick, src:"claude", modelLabel:label, modelApplied:applied, substituted: !!(applied && !applied.startsWith(CLAUDE.model)),
-      steps:(Array.isArray(j.steps) ? j.steps : []).slice(0, 6).map(String), thought:String(j.thought || "…"), feeling:String(j.feeling || "?"), goalText:"", invention:null};
-    const valid = ["search","think","build","teach","chat","trade","steal","revenge","apologize","ally","gather_food","gather_mat","rest"];
-    if (valid.includes(j.goal)){
-      const tgt = S.agents.find(b => b !== a && j.goal_target && b.name.toLowerCase() === String(j.goal_target).toLowerCase());
-      a.goal = {action:j.goal, target:tgt ? tgt.i : null, until:S.tick + 160, text:(ACTION_LABEL[j.goal] || j.goal) + (tgt ? " " + tgt.name : "")};
-      trace.goalText = a.goal.text + " (boosted for the next 160 days)";
-    } else trace.goalText = "none";
-    if (j.invention && j.invention.name && Array.isArray(j.invention.builds_on)){
-      const pre = j.invention.builds_on.filter(id => a.known.has(id)).slice(0, 3);
-      const name = String(j.invention.name).slice(0, 40);
-      if (pre.length >= 1 && !CORPUS.some(d => d.name.toLowerCase() === name.toLowerCase())){
-        const id = "custom_" + (++S.customCount);
-        const era = Math.max(...pre.map(p => BY[p].era));
-        const d = {id, name, era, pre, q:"what " + name + " is", blurb:String(j.invention.blurb || "").slice(0, 200), custom:true};
-        CORPUS.push(d); BY[id] = d;
-        learn(a, id, "claude"); a.stats.invented++;
-        trace.invention = `${name}: ${d.blurb}`;
-        log("claude", a.i, `✦ ${a.name} imagined an original invention: ${name}.`);
-        remember(a, `I imagined something new: ${name}.`, "invent");
-      }
+    const arr = Array.isArray(j.characters) ? j.characters : [j];
+    for (const a of list){
+      if (!S.agents.includes(a)) continue;
+      const r = arr.find(x => x && String(x.name || "").toLowerCase() === a.name.toLowerCase()) || (list.length === 1 ? arr[0] : null);
+      if (r) applyReflection(a, r, res);
+      else { a.deepCode = "missing"; a.deepErr = "Claude's answer skipped this character."; }
     }
-    a.thoughts.push(trace); if (a.thoughts.length > 60) a.thoughts.shift();
-    a.mood = "🤩";
-    say(a, "🧠 " + trace.thought, 120);
-    log("claude", a.i, `🧠 ${a.name} reflected: "${trace.thought}"`);
-    remember(a, `Deep thought: ${trace.thought}`, "claude");
     UI.histSel = null;
   } catch (e){
     if (!S) return;
-    const code = e && e.code;
-    a.deepCode = code || "unknown";
-    a.deepErr = code === "cancelled" ? null
-      : code === "not_granted" ? "This page isn't allowed to use Claude yet. A saved refusal blocks it until you turn it back on."
-      : code === "sampling_disabled" ? "Claude isn't enabled for your account or organization, so this page can't use it."
-      : code === "session_expired" ? "Your claude.ai sign-in expired. Sign in again, then retry."
-      : code === "rate_limited" ? "You've hit a usage or rate limit. Wait a minute, then try again."
-      : code === "refused" ? "Claude chose not to answer this one. Click Deep think to try again; a different moment in the game usually works."
-      : code === "capability_disabled" ? "Claude is allowed but can't run in this view. Open the page directly on claude.ai."
-      : ((e && e.message) || "Claude couldn't answer.");
-    say(a, "🤔 …", 30);
+    const {code, msg} = claudeError(e);
+    for (const a of list){ a.deepCode = code; a.deepErr = msg; say(a, "🤔 …", 30); }
   } finally {
     TIMERS.aborts.delete(ctl);
-    if (S && S.agents.includes(a)){ a.deep = false; a.deepCtl = null; UI.dirty = true; }
+    if (S) for (const a of list){ if (S.agents.includes(a)){ a.deep = false; a.deepCtl = null; } }
+    UI.dirty = true;
   }
 }
 function syncClaudeUI(){
   $("claudeSwitch").setAttribute("aria-checked", String(CLAUDE.on));
   $("modelSel").disabled = !CLAUDE.on;
   if (CLAUDE.sample) $("claudeState").textContent = CLAUDE.on ? "on · uses your Claude usage" : "off";
+  $("councilBtn").hidden = !(CLAUDE.on && CLAUDE.sample);
   UI.dirty = true;
 }
 
@@ -1369,6 +1393,7 @@ document.querySelectorAll("[data-speed]").forEach(b => b.addEventListener("click
   if (UI.paused) togglePause();
 }));
 $("claudeSwitch").addEventListener("click", () => { if (!CLAUDE.sample) return; CLAUDE.on = !CLAUDE.on; syncClaudeUI(); });
+$("councilBtn").addEventListener("click", () => { if (S && CLAUDE.on) deepThink(S.agents); });
 $("modelSel").addEventListener("change", e => { CLAUDE.model = e.target.value; UI.dirty = true; });
 $("bondsBtn").addEventListener("click", e => { UI.bonds = !UI.bonds; e.currentTarget.setAttribute("aria-pressed", String(UI.bonds)); });
 $("bubblesBtn").addEventListener("click", e => { UI.bubbles = !UI.bubbles; e.currentTarget.setAttribute("aria-pressed", String(UI.bubbles)); });
