@@ -1213,19 +1213,22 @@ async function deepThink(a){
   const ctl = new AbortController(); TIMERS.aborts.add(ctl); a.deepCtl = ctl;
   const known = [...a.known];
   const reach = reachable(a).map(d => d.name);
-  const prompt = `You are the private inner voice of ${a.name}, one of five people in a civilization simulation that started in the Stone Age.
-Personality (0 to 1): ${TRAITS.map(t => t + " " + a.tr[t].toFixed(2)).join(", ")}.
-Current era of the society: ${ERAS[S.era]}. Day ${S.tick}.
-Needs (0 good, 100 bad): hunger ${Math.round(a.needs.hunger)}, fatigue ${Math.round(a.needs.fatigue)}, loneliness ${Math.round(a.needs.loneliness)}. Food ${a.food}, materials ${a.mats}.
-Known discoveries (ids): ${known.join(", ")}.
-Discoveries now within reach: ${reach.join(", ") || "none"}.
-Feelings about others (trust -100..100): ${S.agents.filter(b => b !== a).map(b => b.name + " " + a.trust[b.i]).join(", ")}.
-Grudges: ${a.grudges.filter(g => g.sev > 1).map(g => S.agents[g.against].name + ": " + g.reason).join("; ") || "none"}.
-Recent memories: ${a.mem.slice(-8).map(m => m.text).join(" | ")}.
+  const MOVE_WORDS = {search:"research at the Archive", think:"experiment and invent", build:"build", teach:"teach someone", chat:"socialize", trade:"trade", steal:"take resources", revenge:"retaliate in the game", apologize:"make amends", ally:"form an alliance", gather_food:"gather food", gather_mat:"gather materials", rest:"rest"};
+  const prompt = `I'm running a turn-based civilization strategy game (a simple economy simulation, similar to a board game). Five game characters start in the Stone Age and research their way up a tech tree. Please write a short, thoughtful explanation of how the character "${a.name}" might reason about their next move, so the player can follow the character's logic. Everything is fictional game state: resource counts and trust scores.
 
-Think as ${a.name} would, using only what they know. You may imagine ONE original invention that could plausibly be built from 2 or 3 of the known discovery ids (it must not be one of the standard discoveries above). Keep conflict non-graphic (theft, sabotage, rumours, forgiveness).
-Reply with ONLY a JSON object, no other text:
-{"steps":["3 to 5 short reasoning steps in first person"],"thought":"one sentence inner monologue","feeling":"one or two words","goal":"one of: search, think, build, teach, chat, trade, steal, revenge, apologize, ally, gather_food, gather_mat, rest","goal_target":"a name from ${S.agents.filter(b=>b!==a).map(b=>b.name).join("/")} or null","invention":null or {"name":"short name","blurb":"one sentence on what it does","builds_on":["2-3 ids from the known list"]}}`;
+Character: ${a.name}. Personality scores (0 to 1): ${TRAITS.map(t => t + " " + a.tr[t].toFixed(2)).join(", ")}.
+Current age: ${ERAS[S.era]}. Turn ${S.tick}.
+Needs (0 = fine, 100 = urgent): hunger ${Math.round(a.needs.hunger)}, fatigue ${Math.round(a.needs.fatigue)}, loneliness ${Math.round(a.needs.loneliness)}. Food ${a.food}, materials ${a.mats}.
+Technologies known (ids): ${known.join(", ")}.
+Technologies now researchable: ${reach.join(", ") || "none"}.
+Trust scores toward other characters (-100 to 100): ${S.agents.filter(b => b !== a).map(b => b.name + " " + a.trust[b.i]).join(", ")}.
+Rivalries in the game: ${a.grudges.filter(g => g.sev > 1).map(g => S.agents[g.against].name + " (" + g.reason + ")").join("; ") || "none"}.
+Recent game events: ${a.mem.slice(-6).map(m => m.text).join(" | ")}.
+
+Also, if it fits, suggest ONE new technology idea the character could invent from 2 or 3 of the known technology ids (not one already listed).
+Available moves: ${Object.entries(MOVE_WORDS).map(([k,v]) => k + " (" + v + ")").join(", ")}.
+Reply with only a JSON object in this shape:
+{"steps":["3 to 5 short reasoning steps, written in first person as ${a.name}"],"thought":"one sentence summary of ${a.name}'s plan","feeling":"one or two words","goal":"one move key from the list","goal_target":"one of ${S.agents.filter(b=>b!==a).map(b=>b.name).join(", ")}, or null","invention":null or {"name":"short name","blurb":"one sentence on what it does","builds_on":["2-3 ids from the known list"]}}`;
   try {
     const perm = await getPerm();
     if (perm){
@@ -1277,6 +1280,7 @@ Reply with ONLY a JSON object, no other text:
       : code === "sampling_disabled" ? "Claude isn't enabled for your account or organization, so this page can't use it."
       : code === "session_expired" ? "Your claude.ai sign-in expired. Sign in again, then retry."
       : code === "rate_limited" ? "You've hit a usage or rate limit. Wait a minute, then try again."
+      : code === "refused" ? "Claude chose not to answer this one. Click Deep think to try again; a different moment in the game usually works."
       : code === "capability_disabled" ? "Claude is allowed but can't run in this view. Open the page directly on claude.ai."
       : ((e && e.message) || "Claude couldn't answer.");
     say(a, "🤔 …", 30);
