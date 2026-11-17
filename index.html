@@ -138,6 +138,9 @@ h1,h2,h3{font-family:var(--font-display);text-wrap:balance;margin:0}
 .div-bar i{position:absolute;top:0;bottom:0;border-radius:4px}
 .grudges{font-size:12px;display:flex;flex-direction:column;gap:3px;margin-top:6px}
 .grudge{border-left:3px solid var(--bad);padding-left:8px}
+.voice{display:flex;flex-direction:column;gap:6px;border-left:3px solid var(--accent);padding-left:10px}
+.voice p{margin:0;font-size:13px}
+.voice i{color:var(--muted)}
 .mem{display:flex;flex-direction:column;gap:3px;font-size:12px;max-height:240px;overflow:auto}
 .mem div{display:grid;grid-template-columns:52px minmax(0,1fr);gap:6px}
 .svgwrap{overflow-x:auto;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)}
@@ -545,6 +548,66 @@ function optionsFor(a){
   return opts;
 }
 
+/* ---------- inner voice: turns the scored reasons into first-person thought ---------- */
+const POS = [
+  [/^hunger/, "my stomach is empty"], [/^food stock/, "my food is running low"], [/^fatigue/, "I'm worn out"],
+  [/^curiosity/, "I'm burning to know more"], [/^wants to understand (.+)/, m => `I want to understand ${m[1]}`],
+  [/^the Archive is richer/, "the Archive has more in it now"], [/^creativity/, "ideas are bubbling up"],
+  [/^ideas within reach/, "I can almost see something new"], [/^workshop bonus/, "my workshop helps me think"],
+  [/^can build (.+)/, m => `I have what I need for a ${m[1]}`], [/^ambition/, "I want to leave a mark"],
+  [/^needs \d+ materials for (.+)/, m => `I need materials for a ${m[1]}`], [/^materials/, "I'm short on materials"],
+  [/^generous nature/, "sharing feels right"], [/^trust in (\w+)/, m => `I trust ${m[1]}`], [/^lonely/, "I need company"],
+  [/^likes (\w+)/, m => `I like ${m[1]}`], [/^surplus/, "I have more than I need"], [/^knows trade/, "I know how to bargain"],
+  [/^aggression/, "I want what they have"], [/^envy of (\w+)/, m => `${m[1]} has more than me`], [/^distrusts (\w+)/, m => `I don't trust ${m[1]}`],
+  [/^grudge: (.+)/, m => `they ${m[1]}`], [/^vengeful/, "I don't let things go"], [/^guilt about (.+)/, m => `I feel bad that I ${m[1]}`],
+  [/^wants peace/, "I want peace"], [/^mutual trust/, "we trust each other"], [/^safety in numbers/, "there's safety in numbers"],
+  [/^goal from deep thought/, "I already made up my mind"],
+];
+const NEG = [
+  [/^not hungry/, "I'm not hungry"], [/^not tired/, "I'm not tired"], [/^too hungry/, "I'm too hungry to focus"], [/^too tired|^tired/, "I'm too tired"],
+  [/^nothing new to combine/, "I have nothing new to combine"], [/^nothing to build/, "there's nothing to build"],
+  [/^no shared language/, "we can't really talk yet"], [/^refuses to help/, "I won't help an enemy"], [/^avoids (\w+)/, m => `I'd rather avoid ${m[1]}`],
+  [/^fear of getting caught/, "I might get caught"], [/^the law punishes/, "the law would punish me"], [/^would betray an ally/, "they're my ally"],
+  [/^conscience/, "it would feel wrong"], [/^just stole/, "I just took something; I shouldn't push my luck"],
+  [/^cooler head/, "a cooler head says wait"], [/^tired of fighting/, "I'm tired of fighting"], [/^revenge is against the law/, "the law forbids it"],
+  [/^pride/, "my pride gets in the way"],
+];
+function phrase(r, table){ for (const [re, f] of table){ const m = r[0].match(re); if (m) return typeof f === "function" ? f(m) : f; } return r[0]; }
+const DO = {eat:"I'll eat", gather_food:"I'll go find food", gather_mat:"I'll gather materials", rest:"I'll rest", search:"I'll search the Archive", think:"I'll sit and think", build:"I'll build", teach:"I'll teach", chat:"I'll talk with", trade:"I'll trade with", steal:"I'll take something from", revenge:"I'll get back at", apologize:"I'll apologize to", ally:"I'll ask to join forces with"};
+const COULD = {eat:"eat", gather_food:"look for food", gather_mat:"gather materials", rest:"rest", search:"search the Archive", think:"think", build:"build", teach:"teach", chat:"talk with", trade:"trade with", steal:"take from", revenge:"get back at", apologize:"apologize to", ally:"ally with"};
+function innerVoice(a, opts, best){
+  const n = a.needs, out = [];
+  if (n.hunger > 75) out.push("I'm starving."); else if (n.hunger > 50) out.push("I'm getting hungry.");
+  if (n.fatigue > 75) out.push("I can barely keep my eyes open.");
+  if (n.loneliness > 75) out.push("I feel so alone.");
+  const g = a.grudges.filter(x => x.sev > 30).sort((x, y) => y.sev - x.sev)[0];
+  if (g && rnd() < .6) out.push(`I still can't forgive ${S.agents[g.against].name}: they ${g.reason}.`);
+  if (a.wish.length && rnd() < .4) out.push(`I keep wondering about ${BY[a.wish[0]]?.name}.`);
+  const tn = o => o.target != null ? " " + S.agents[o.target].name : o.action === "build" ? " a " + BUILDINGS.find(b => b.id === o.building).name : "";
+  const alt = opts.find(o => o !== best && o.action !== best.action);
+  if (alt && rnd() < .75){
+    const neg = alt.reasons.filter(r => r[1] < 0).sort((x, y) => x[1] - y[1])[0];
+    out.push(`I could ${COULD[alt.action]}${tn(alt)}, but ${neg ? phrase(neg, NEG) : pick(["that can wait", "not right now", "something else matters more", "maybe later", "it's not the moment", "I'd rather not yet"])}.`);
+  }
+  const pos = best.reasons.filter(r => r[1] > 0 && r[0] !== "whim").sort((x, y) => y[1] - x[1])[0];
+  const decision = `${DO[best.action]}${tn(best)}${pos ? ", because " + phrase(pos, POS) : ""}.`;
+  out.push(decision);
+  return {text:out.join(" "), decision};
+}
+function reactionTo(a, o, out, learned){
+  if (learned) return `Yes! Now I understand ${BY[learned].name}.`;
+  if (o.action === "search" && /too advanced/.test(out)) return "Too hard for me yet. I need to learn the basics first.";
+  if (o.action === "search" || o.action === "think") return /not quite|Not there yet|nothing/.test(out) ? "Not yet. I'll keep trying." : "";
+  if (o.action === "steal") return /caught me/.test(out) ? "They saw me. That was a mistake." : "Nobody saw. Good.";
+  if (o.action === "revenge") return "That'll teach them. Maybe.";
+  if (o.action === "apologize") return /forgave/.test(out) ? "What a relief." : "They're still angry. I'll give it time.";
+  if (o.action === "teach") return /Taught/.test(out) ? "It feels good to share what I know." : "That didn't go well.";
+  if (o.action === "ally") return "Together we're stronger.";
+  if (o.action === "build") return /Built/.test(out) ? "Look at what I made!" : "";
+  if (o.action === "eat") return "Much better.";
+  if (o.action === "rest") return "I feel stronger.";
+  return "";
+}
 function decide(a){
   const opts = optionsFor(a);
   const best = opts[0];
@@ -554,6 +617,7 @@ function decide(a){
     options:opts.slice(0, 8), chosen:best, outcome:"…", learned:null,
     label: labelOf(best),
   };
+  const v = innerVoice(a, opts, best); trace.voice = v.text; trace.decision = v.decision;
   a.thoughts.push(trace);
   if (a.thoughts.length > 60) a.thoughts.shift();
   if (a.goal && S.tick > a.goal.until) a.goal = null;
@@ -598,7 +662,9 @@ function start(a, o, trace){
     case "ally": dest = near(tb); dur = 8; bubble = `🤝 ${tb.name}, let's stand together`; break;
   }
   a.act = {o, trace, dest, dur, left:dur, arrived:false};
-  if (!(a.claudeBubbleUntil > S.tick)) say(a, bubble, 999);
+  const icon = bubble.split(" ")[0];
+  const spoken = o.action === "search" || o.action === "think" ? bubble : icon + " " + (trace.decision || bubble);
+  if (!(a.claudeBubbleUntil > S.tick)) say(a, spoken, 999);
   a.mood = moodOf(a, o.action);
 }
 const jitter = (p, r) => ({x:p.x + (rnd()-.5)*r*2, y:p.y + (rnd()-.5)*r*2});
@@ -724,8 +790,9 @@ function finish(a){
       hearts(a.x, a.y); break; }
   }
   trace.outcome = out;
+  trace.reaction = reactionTo(a, o, out, learned);
   if (learned){ const d = BY[learned]; trace.learned = `New knowledge: ${d.name}. ${d.blurb}`; a.wish = a.wish.filter(w=>w!==learned); }
-  if (!(a.claudeBubbleUntil > S.tick)) say(a, outcomeBubble(o, out), 55);
+  if (!(a.claudeBubbleUntil > S.tick)) say(a, trace.reaction ? "💭 " + trace.reaction : outcomeBubble(o, out), 55);
   a.act = null;
 }
 function outcomeBubble(o, out){
@@ -1065,10 +1132,12 @@ function traceHTML(a, tr, live){
     </div>`;
   }
   return `<div class="now">
+    ${tr.voice ? `<div class="stage-row"><span class="stage-lbl">Inner voice</span><span class="out" style="font-style:italic">"${esc(tr.voice)}"</span></div>` : ""}
     <div class="stage-row"><span class="stage-lbl">1 · Perceive</span><div class="needs">${needBar("Hunger", tr.needs.hunger)}${needBar("Fatigue", tr.needs.fatigue)}${needBar("Loneliness", tr.needs.loneliness)}<div class="need mono" style="align-self:end">🍖 ${tr.needs.food} food · 🪨 ${tr.needs.mats} mat.</div></div></div>
     <div class="stage-row"><span class="stage-lbl">2 · Weigh</span>${optionsHTML(tr)}</div>
     <div class="stage-row"><span class="stage-lbl">3 · Decide</span><span class="out"><b>${esc(tr.label)}</b></span></div>
     <div class="stage-row"><span class="stage-lbl">4 · Outcome</span><span class="out">${esc(tr.outcome)}</span></div>
+    ${tr.reaction ? `<div class="stage-row"><span class="stage-lbl">Reaction</span><span class="out" style="font-style:italic">"${esc(tr.reaction)}"</span></div>` : ""}
     ${tr.learned ? `<div class="stage-row"><span class="stage-lbl">5 · Learned</span><span class="out">${esc(tr.learned)}</span></div>` : ""}
   </div>`;
 }
@@ -1123,6 +1192,8 @@ function renderMind(){
     <div class="traits">${a.goal ? `<span class="pill" style="border-color:var(--claude);color:var(--claude)">goal: ${esc(a.goal.text)}</span>` : ""}${a.wish.slice(0,3).map(w => `<span class="pill">wants: ${esc(BY[w]?.name || w)}</span>`).join("")}${[...a.allies].map(j => `<span class="pill" style="border-color:var(--good)">ally: ${esc(S.agents[j].name)}</span>`).join("")}</div></div></div>`;
   if (claudeOn) h += `<div class="deep"><button class="btn-claude" id="deepBtn" ${a.deep || CLAUDE.run ? "disabled" : ""}>${a.deep ? `🧠 Auto-thinking${CLAUDE.run ? " · cycle " + (CLAUDE.run.cycle + 1) : "…"}` : `🧠 Auto-think as ${esc(a.name)}`}</button>${a.deep ? `<button class="btn" id="stopDeep">Stop</button>` : ""}<span class="small">${CLAUDE.model === "claude-opus-5-5" ? "Opus" : "Sonnet"} · medium · may invent something new</span></div>`;
   if (a.deepErr) h += `<div class="small" style="color:var(--bad);display:flex;flex-direction:column;gap:6px"><span>${esc(a.deepErr)} <span class="mono">(${esc(a.deepCode)})</span></span>${a.deepCode === "not_granted" ? `<span><button class="btn-claude" id="permBtn">Allow Claude for this page</button></span><span class="small" id="permHelp" style="color:var(--muted)">Opens this page's Permissions panel. Turn Claude on there, then click Deep think again.</span>` : ""}</div>`;
+  const vs = a.thoughts.filter(t => t.src !== "claude" && t.voice).slice(-8).reverse();
+  h += `<section class="sec"><h3>💭 Inner voice <span class="small" style="text-transform:none;letter-spacing:0">nonstop, offline</span></h3><div class="voice">${vs.map((t, i) => `<p style="opacity:${1 - i*0.09}"><span class="mono small">${fmtDay(t.t).replace("Day ","d")}</span> ${esc(t.voice)}${t.reaction ? ` <i>${esc(t.reaction)}</i>` : ""}</p>`).join("") || `<p class="empty">Waking up…</p>`}</div></section>`;
   if (a.lastClaude) h += `<section class="sec"><h3>🧠 Claude's latest reflection <span class="small mono" style="text-transform:none;letter-spacing:0">${fmtDay(a.lastClaude.t)}</span></h3>${traceHTML(a, a.lastClaude)}</section>`;
   h += `<section class="sec"><h3>${UI.histSel ? "Past thought · " + fmtDay(tr.t) : "Thinking right now"}${UI.histSel ? `<button class="btn" id="liveBtn">Back to live</button>` : ""}</h3>${tr ? traceHTML(a, tr) : `<p class="empty">No thoughts yet.</p>`}</section>`;
   h += `<section class="sec"><h3>Thought history</h3><div class="hist">${a.thoughts.slice(-24).reverse().map(t => `<button data-th="${t.t}" data-src="${t.src}" aria-pressed="${UI.histSel && UI.histSel.t === t.t && UI.histSel.src === t.src}"><span class="mono tk">${fmtDay(t.t).replace("Day ","d")}</span><span>${t.src === "claude" ? "🧠" : "·"}</span><span class="${t.src === "claude" ? "src-claude" : ""}">${esc(t.src === "claude" ? t.thought : t.label + " → " + t.outcome)}</span></button>`).join("")}</div></section>`;
@@ -1325,7 +1396,7 @@ function waitTicks(n, signal){
   const target = S.tick + n, t0 = performance.now();
   return new Promise(res => {
     const check = () => {
-      if (!S || signal.aborted || S.tick >= target || performance.now() - t0 > 40000) return res();
+      if (!S || signal.aborted || S.tick >= target || performance.now() - t0 > 120000) return res();
       later(check, 250);
     };
     check();
@@ -1359,15 +1430,15 @@ async function autoThink(list){
   const tool = {
     name:"reflect_and_watch",
     description:"Records one reflection per listed character (applied in the game right away), then lets game time pass and RETURNS the updated state of those characters plus recent game events. Call it once per cycle, one call at a time.",
-    inputSchema:{type:"object", properties:{characters:{type:"array", items:REFLECTION_SCHEMA}, turns:{type:"integer", minimum:30, maximum:300, description:"how many game turns to let pass before the next observation"}}, required:["characters"]},
+    inputSchema:{type:"object", properties:{characters:{type:"array", items:REFLECTION_SCHEMA}, turns:{type:"integer", minimum:100, maximum:800, description:"how many game turns to let pass before the next observation (200-500 recommended)"}}, required:["characters"]},
     async execute(input, context){
       if (!S || context.signal.aborted) throw new Error("The game was stopped.");
       applyAll(Array.isArray(input.characters) ? input.characters : [], {});
       CLAUDE.run && CLAUDE.run.cycle++; syncClaudeUI();
       const from = S.tick;
-      await waitTicks(clamp(Number(input.turns) || 80, 30, 300), context.signal);
+      await waitTicks(clamp(Number(input.turns) || 300, 100, 800), context.signal);
       if (!S || context.signal.aborted) throw new Error("The game was stopped.");
-      const evs = S.events.filter(e => e.t > from && (e.ai < 0 || list.some(a => a.i === e.ai) || list.some(a => e.text.includes(a.name)))).slice(-10).map(e => "turn " + e.t + ": " + e.text);
+      const evs = S.events.filter(e => e.t > from && (e.ai < 0 || list.some(a => a.i === e.ai) || list.some(a => e.text.includes(a.name)))).slice(-16).map(e => "turn " + e.t + ": " + e.text);
       return `Now turn ${S.tick}, age: ${ERAS[S.era]}.${UI.paused ? " (The player has paused the game, so little changed.)" : ""}\n\n${list.map(brief).join("\n\n")}\n\nEvents since the last observation:\n${evs.join("\n") || "nothing notable"}`;
     }
   };
@@ -1376,7 +1447,7 @@ Current age: ${ERAS[S.era]}. Turn ${S.tick}.
 The player wants to watch how ${names.length > 1 ? "these characters" : "this character"} (${names.join(", ")}) reason over time. Run an observe-and-reflect loop:
 1. Call reflect_and_watch with one short, thoughtful reflection for each listed character: how they might reason about their next move, written so the player can follow their logic. If it fits, include ONE new technology idea built from 2 or 3 of their known technology ids.
 2. Read the new state it returns and call it again with fresh reflections that respond to what changed.
-Repeat for as many cycles as you can, one call at a time. When you have to stop, reply with only the final reflections as JSON: {"characters":[ ...same shape as the tool's characters... ]}.
+Let a long stretch pass each time (turns 200-500) so each cycle covers real change, and repeat for as many cycles as you can, one call at a time. When you have to stop, reply with only the final reflections as JSON: {"characters":[ ...same shape as the tool's characters... ]}.
 Available moves (goal keys): ${Object.entries(MOVE_WORDS).map(([k,v]) => k + " (" + v + ")").join(", ")}.
 
 ${list.map(brief).join("\n\n")}`;
